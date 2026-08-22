@@ -1,2 +1,4 @@
 vkbottle==4.1.11
 aiohttp==3.9.5
+vk-api==11.9.9
+requests==2.31.0
