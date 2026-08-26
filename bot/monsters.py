@@ -19,20 +19,22 @@ FOREST_IMAGES = {
 
 FOREST_MONSTERS = {
     'weak': [
-        {'name': 'Гоблин-разведчик', 'base_hp': 25, 'base_attack': 5, 'base_defense': 1, 'exp': 12, 'silver': 4, 'description': 'Маленький, но юркий. Опасен в стае.'},
-        {'name': 'Лесной крыс', 'base_hp': 20, 'base_attack': 4, 'base_defense': 0, 'exp': 10, 'silver': 3, 'description': 'Грызун размером с собаку. Зубы острые.'},
-        {'name': 'Волк-одиночка', 'base_hp': 30, 'base_attack': 6, 'base_defense': 2, 'exp': 15, 'silver': 5, 'description': 'Худой, но злой. Лучше не встречаться с ним в темноте.'},
-        {'name': 'Зомби-лесник', 'base_hp': 35, 'base_attack': 5, 'base_defense': 3, 'exp': 14, 'silver': 4, 'description': 'Бывший охотник. Теперь ищет живую плоть.'},
-        {'name': 'Енот-переросток', 'base_hp': 22, 'base_attack': 5, 'base_defense': 1, 'exp': 11, 'silver': 3, 'description': 'Злой и пушистый. Ворует еду у путников.'}
+        {'name': 'Гоблин-разведчик', 'base_hp': 25, 'base_attack': 5, 'base_defense': 2, 'exp': 15, 'silver': 10, 'description': 'Маленький, но юркий. Опасен в стае.'},
+        {'name': 'Лесной крыс', 'base_hp': 15, 'base_attack': 3, 'base_defense': 0, 'exp': 5, 'silver': 5, 'description': 'Грызун размером с собаку. Зубы острые.'},
+        {'name': 'Волк-одиночка', 'base_hp': 25, 'base_attack': 6, 'base_defense': 2, 'exp': 20, 'silver': 10, 'description': 'Худой, но злой. Лучше не встречаться с ним в темноте.'},
+        {'name': 'Зомби-лесник', 'base_hp': 30, 'base_attack': 6, 'base_defense': 3, 'exp': 20, 'silver': 10, 'description': 'Бывший охотник. Теперь ищет живую плоть.'},
+        {'name': 'Енот-переросток', 'base_hp': 20, 'base_attack': 3, 'base_defense': 1, 'exp': 10, 'silver': 5, 'description': 'Злой и пушистый. Ворует еду у путников.'}
     ],
     'medium': [
-        {'name': 'Лесной тролль', 'base_hp': 55, 'base_attack': 10, 'base_defense': 4, 'exp': 30, 'silver': 12, 'description': 'Огромный, неуклюжий, но очень сильный.'},
-        {'name': 'Ядовитый паук', 'base_hp': 40, 'base_attack': 12, 'base_defense': 2, 'exp': 28, 'silver': 10, 'description': 'Плетёт сети и ждёт жертв. Его укус смертелен для слабых.'},
-        {'name': 'Оборотень-неудачник', 'base_hp': 50, 'base_attack': 11, 'base_defense': 3, 'exp': 32, 'silver': 11, 'description': 'Получеловек-полуволк. Вечно на кого-то злится.'}
+        {'name': 'Лесной тролль', 'base_hp': 55, 'base_attack': 10, 'base_defense': 4, 'exp': 40, 'silver': 20, 'description': 'Огромный, неуклюжий, но очень сильный.'},
+        {'name': 'Ядовитый паук', 'base_hp': 45, 'base_attack': 12, 'base_defense': 2, 'exp': 30, 'silver': 15, 'description': 'Плетёт сети и ждёт жертв. Его укус смертелен для слабых.'},
+        {'name': 'Оборотень-неудачник', 'base_hp': 50, 'base_attack': 12, 'base_defense': 5, 'exp': 35, 'silver': 20, 'description': 'Получеловек-полуволк. Вечно на кого-то злится.'},
+        {'name': 'Лесная гарпия', 'base_hp': 45, 'base_attack': 13, 'base_defense': 2, 'exp': 35, 'silver': 25, 'description': 'Птица с лицом женщины. Её крик оглушает.'},
+        {'name': 'Древень', 'base_hp': 70, 'base_attack': 12, 'base_defense': 7, 'exp': 45, 'silver': 40, 'description': 'Ожившее дерево. Медленное, но очень прочное.'}
     ],
     'boss': [
-        {'name': 'Лесной великан', 'base_hp': 90, 'base_attack': 18, 'base_defense': 8, 'exp': 60, 'silver': 30, 'description': 'Древний хранитель леса. Сокрушит любого.'},
-        {'name': 'Ведьма-лесовичка', 'base_hp': 75, 'base_attack': 20, 'base_defense': 5, 'exp': 55, 'silver': 25, 'description': 'Злая колдунья из чащи. Знает тёмные заклинания.'}
+        {'name': 'Лесной великан', 'base_hp': 125, 'base_attack': 20, 'base_defense': 15, 'exp': 120, 'silver': 150, 'description': 'Древний хранитель леса. Сокрушит любого.'},
+        {'name': 'Ведьма-лесовичка', 'base_hp': 80, 'base_attack': 30, 'base_defense': 0, 'exp': 100, 'silver': 90, 'description': 'Злая колдунья из чащи. Знает тёмные заклинания.'}
     ]
 }
 

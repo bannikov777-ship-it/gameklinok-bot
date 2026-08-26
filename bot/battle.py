@@ -1,4 +1,4 @@
-# battle.py - в начале файла
+# battle.py
 import random
 import time
 import sqlite3
@@ -14,6 +14,7 @@ from guild import get_guild_by_character, guild_exp_to_next_level
 from quests import update_quest_progress
 from resources import drop_resource_for_monster, add_resource
 from keyboards import get_graveyard_after_battle_keyboard, get_back_keyboard, get_after_battle_keyboard
+from vip import get_vip, get_vip_bonus, VIP_NAMES, VIP_COLORS
 
 FOREST_IMAGE = 'photo-240828623_456239316'
 FOREST_DEEP_IMAGE = 'photo-240828623_456239315'
@@ -64,7 +65,7 @@ def get_after_battle_keyboard():
     keyboard.add_button('🌲 В глубь леса', color=VkKeyboardColor.PRIMARY, payload={'cmd': 'forest_deep'})
     keyboard.add_button('🚶 Побродить', color=VkKeyboardColor.PRIMARY, payload={'cmd': 'forest_wander'})
     keyboard.add_line()
-    keyboard.add_button('🔙 К воротам', color=VkKeyboardColor.SECONDARY, payload={'cmd': 'back_to_exit'})
+    keyboard.add_button('🚪 К выходу', color=VkKeyboardColor.SECONDARY, payload={'cmd': 'go_exit'})
     return keyboard
 
 async def start_battle(vk, user_id, zone, depth=0):
@@ -91,7 +92,7 @@ async def start_battle(vk, user_id, zone, depth=0):
         'crit_chance': char['crit_chance'],
         'dodge_chance': char['dodge_chance'],
         'round': 0,
-        'parry_cooldown': 0,
+        'parry_charges': 4,  # 4 заряда = готово
         'counter_available': True,
         'shield': False,
         'shield_active': False,
@@ -125,13 +126,15 @@ async def send_battle_status_from_context(vk, user_id, context):
     log_text = "\n".join(battle['log'][-5:])
     if not log_text:
         log_text = "⚔️ Бой начинается!"
-    parry_cooldown = battle['parry_cooldown']
-    if parry_cooldown == 0:
+    
+    # ПАРИРОВАНИЕ - новая логика с зарядами
+    parry_charges = battle.get('parry_charges', 4)
+    
+    if parry_charges >= 4:
         parry_status = "✅ Готово"
     else:
-        blocks_filled = 4 - parry_cooldown
-        bar = "█" * blocks_filled + "□" * (4 - blocks_filled)
-        parry_status = f"🔄 {bar} (перезарядка {parry_cooldown}/4)"
+        bar = "█" * parry_charges + "□" * (4 - parry_charges)
+        parry_status = f"🔄 {bar} ({parry_charges}/4)"
     
     shield_status = "❌ Нет"
     if battle.get('shield_active'):
@@ -241,11 +244,8 @@ async def process_battle_action(vk, user_id, action, payload=None):
     player_class = battle['player_class']
     battle['parry_used_this_turn'] = False
     battle['round'] += 1
-    if battle['parry_cooldown'] > 0:
-        battle['parry_cooldown'] -= 1
-        if battle['parry_cooldown'] == 0:
-            battle['counter_available'] = True
 
+    # Обработка действий
     if action == 'attack':
         damage = battle['player_attack'] + random.randint(-2, 3) - monster['defense']
         damage = max(1, damage)
@@ -255,6 +255,10 @@ async def process_battle_action(vk, user_id, action, payload=None):
         else:
             battle['log'].append(f"⚔️ Вы нанесли {damage} урона.")
         monster['hp'] -= damage
+        
+        # Пополняем заряд парирования после атаки
+        battle['parry_charges'] = min(4, battle.get('parry_charges', 0) + 1)
+        
     elif action == 'defend':
         cost = max(1, int(battle['player_max_stamina'] * 0.1))
         if battle['player_stamina'] < cost:
@@ -266,19 +270,30 @@ async def process_battle_action(vk, user_id, action, payload=None):
         battle['shield_active'] = True
         battle['shield_duration'] = 3
         battle['log'].append(f"🛡 Вы встали в защитную стойку на 3 хода (потрачено {cost} выносливости).")
+        
+        # Пополняем заряд парирования после защиты
+        battle['parry_charges'] = min(4, battle.get('parry_charges', 0) + 1)
+        
     elif action == 'parry':
-        if battle['parry_cooldown'] != 0:
+        # Проверяем, есть ли заряды (4 = готово)
+        if battle.get('parry_charges', 0) < 4:
             battle['log'].append("🌀 Парирование ещё не готово.")
             await save_battle_and_send(vk, user_id, context)
             return
+        
+        # Контратака
         counter_damage = int(battle['player_attack'] * 0.8) + random.randint(0, 2)
         monster['hp'] -= counter_damage
         battle['log'].append(f"🌀 Парирование! Контратака на {counter_damage} урона.")
+        
+        # Сбрасываем заряды в 0
+        battle['parry_charges'] = 0
         battle['counter_available'] = False
-        battle['parry_cooldown'] = 4
         battle['parry_used_this_turn'] = True
+        
         await save_battle_and_send(vk, user_id, context)
         return
+        
     elif action == 'super':
         if battle['player_stamina'] < 10:
             battle['log'].append("❌ Недостаточно выносливости (нужно 10).")
@@ -288,6 +303,10 @@ async def process_battle_action(vk, user_id, action, payload=None):
         super_damage = battle['player_attack'] * 2 + random.randint(0, 5)
         monster['hp'] -= super_damage
         battle['log'].append(f"🔥 Суперудар! {super_damage} урона.")
+        
+        # Пополняем заряд парирования после суперудара
+        battle['parry_charges'] = min(4, battle.get('parry_charges', 0) + 1)
+        
     elif action == 'magic':
         if battle['player_mana'] < 5:
             battle['log'].append("❌ Недостаточно маны.")
@@ -297,9 +316,14 @@ async def process_battle_action(vk, user_id, action, payload=None):
         heal = random.randint(15, 30)
         battle['player_hp'] = min(battle['player_max_hp'], battle['player_hp'] + heal)
         battle['log'].append(f"✨ Исцеление: +{heal} HP.")
+        
+        # Пополняем заряд парирования после магии
+        battle['parry_charges'] = min(4, battle.get('parry_charges', 0) + 1)
+        
     elif action == 'potion':
         await show_battle_potions(vk, user_id)
         return
+        
     elif action == 'flee':
         if random.random() < 0.3:
             battle['log'].append("🏃 Вы сбежали!")
@@ -310,15 +334,19 @@ async def process_battle_action(vk, user_id, action, payload=None):
             await monster_attacks(vk, user_id, battle)
             await save_battle_and_send(vk, user_id, context)
             return
+            
     else:
         battle['log'].append("❓ Неизвестное действие.")
         await save_battle_and_send(vk, user_id, context)
         return
 
+    # Проверка на победу
     if monster['hp'] <= 0:
         await asyncio.sleep(0.5)
         await end_battle(vk, user_id, won=True)
         return
+    
+    # Атака монстра
     await monster_attacks(vk, user_id, battle)
     await save_battle_and_send(vk, user_id, context)
 
@@ -461,6 +489,24 @@ async def end_battle(vk, user_id, won, fled=False):
             conn = sqlite3.connect(DB_NAME)
             cur = conn.cursor()
 
+            # VIP бонус
+            from vip import get_vip, get_vip_bonus, VIP_NAMES, VIP_COLORS
+            vip_level, _ = get_vip(char['id'])
+            vip_text = ""
+            exp_bonus = 0
+            silver_bonus = 0
+            
+            if vip_level > 0:
+                bonus = get_vip_bonus(vip_level)
+                exp_bonus = int(exp_gain * bonus['exp'] / 100)
+                silver_bonus = int(silver_gain * bonus['silver'] / 100)
+                exp_gain += exp_bonus
+                silver_gain += silver_bonus
+                
+                vip_icon = VIP_COLORS.get(vip_level, '')
+                vip_name = VIP_NAMES.get(vip_level, '')
+                vip_text = f"\n👑 VIP {vip_name} (+{bonus['exp']}%): +{exp_bonus} опыта, +{silver_bonus} серебра"
+
             char['exp'] += exp_gain
             char['silver'] += silver_gain
 
@@ -542,6 +588,7 @@ async def end_battle(vk, user_id, won, fled=False):
                 f"Вы убили {battle['monster']['name']}!\n"
                 f"Получено опыта: {exp_gain}\n"
                 f"Получено серебра: {silver_gain}\n"
+                f"{vip_text}\n"
                 f"{drop_text}{chest_text}\n"
                 f"Вы находитесь на глубине {depth}"
             )
@@ -570,7 +617,7 @@ async def end_battle(vk, user_id, won, fled=False):
             context = user_data['context']
             context['forest_depth'] = depth
             await update_user_async(user_id, context=context)
-            print(f"🏆 Победа в лесу, сохранена глубина: {depth}")  # <-- логирование
+            print(f"🏆 Победа в лесу, сохранена глубина: {depth}")
             await send_message(vk, user_id, result_text, get_after_battle_keyboard())
             user_data = await get_user_async(user_id)
             context = user_data['context']

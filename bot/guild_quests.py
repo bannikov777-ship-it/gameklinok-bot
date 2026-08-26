@@ -1,4 +1,4 @@
-# guild_quests.py
+# guild_quests.py (полный исправленный)
 import sqlite3
 import json
 import asyncio
@@ -10,22 +10,53 @@ from core import get_character_by_id, send_message, get_user_async, get_characte
 from scheduler import scheduler
 from guild import get_guild_by_character, add_guild_exp
 
-def get_available_guild_quests(player_id):
+
+# ========== ЕЖЕДНЕВНЫЕ КВЕСТЫ ГИЛЬДИИ ==========
+
+def get_daily_guild_quests(guild_id):
+    """Получение ежедневных квестов для гильдии"""
     conn = sqlite3.connect(DB_NAME)
     cur = conn.cursor()
-    cur.execute('SELECT quest_id FROM player_guild_quests WHERE player_id = ?', (player_id,))
-    taken = [row[0] for row in cur.fetchall()]
-    if taken:
-        placeholders = ','.join('?' for _ in taken)
-        cur.execute(f'SELECT id, name, description, duration_minutes, exp_reward, silver_reward, '
-                    f'extra_reward_type, extra_reward_id, extra_reward_quantity, extra_reward_rarity '
-                    f'FROM guild_quests WHERE id NOT IN ({placeholders})', taken)
-    else:
-        cur.execute('SELECT id, name, description, duration_minutes, exp_reward, silver_reward, '
-                    'extra_reward_type, extra_reward_id, extra_reward_quantity, extra_reward_rarity '
-                    'FROM guild_quests')
+    
+    today = datetime.datetime.now().strftime('%Y-%m-%d')
+    
+    # Проверяем, есть ли уже квесты на сегодня
+    cur.execute('SELECT quests FROM guild_quests_daily WHERE guild_id = ? AND date = ?', (guild_id, today))
+    row = cur.fetchone()
+    
+    if row:
+        quest_ids = json.loads(row[0])
+        conn.close()
+        return get_quests_by_ids(quest_ids)
+    
+    # Генерируем новые квесты
+    all_quests = get_all_quest_templates()
+    random.shuffle(all_quests)
+    
+    # Выбираем 3 квеста
+    selected = all_quests[:3]
+    quest_ids = [q['id'] for q in selected]
+    
+    cur.execute('''
+        INSERT INTO guild_quests_daily (guild_id, date, quests)
+        VALUES (?, ?, ?)
+    ''', (guild_id, today, json.dumps(quest_ids)))
+    conn.commit()
+    conn.close()
+    
+    return selected
+
+
+def get_all_quest_templates():
+    """Получение всех шаблонов квестов"""
+    conn = sqlite3.connect(DB_NAME)
+    cur = conn.cursor()
+    cur.execute('SELECT id, name, description, duration_minutes, exp_reward, silver_reward, '
+                'extra_reward_type, extra_reward_id, extra_reward_quantity, extra_reward_rarity '
+                'FROM guild_quests')
     rows = cur.fetchall()
     conn.close()
+    
     quests = []
     for row in rows:
         quests.append({
@@ -41,6 +72,69 @@ def get_available_guild_quests(player_id):
             'extra_reward_rarity': row[9] or 1
         })
     return quests
+
+
+def get_quests_by_ids(quest_ids):
+    """Получение квестов по ID"""
+    if not quest_ids:
+        return []
+    
+    conn = sqlite3.connect(DB_NAME)
+    cur = conn.cursor()
+    placeholders = ','.join('?' for _ in quest_ids)
+    cur.execute(f'''
+        SELECT id, name, description, duration_minutes, exp_reward, silver_reward,
+               extra_reward_type, extra_reward_id, extra_reward_quantity, extra_reward_rarity
+        FROM guild_quests WHERE id IN ({placeholders})
+    ''', quest_ids)
+    rows = cur.fetchall()
+    conn.close()
+    
+    quests = []
+    for row in rows:
+        quests.append({
+            'id': row[0],
+            'name': row[1],
+            'description': row[2],
+            'duration_minutes': row[3],
+            'exp_reward': row[4],
+            'silver_reward': row[5],
+            'extra_reward_type': row[6],
+            'extra_reward_id': row[7],
+            'extra_reward_quantity': row[8] or 1,
+            'extra_reward_rarity': row[9] or 1
+        })
+    return quests
+
+
+def get_available_guild_quests(player_id):
+    """Получение доступных квестов для игрока (ежедневные)"""
+    conn = sqlite3.connect(DB_NAME)
+    cur = conn.cursor()
+    
+    # Получаем гильдию игрока
+    cur.execute('SELECT guild_id FROM guild_members WHERE character_id = ?', (player_id,))
+    guild_row = cur.fetchone()
+    if not guild_row:
+        conn.close()
+        return []
+    
+    guild_id = guild_row[0]
+    
+    # Получаем ежедневные квесты гильдии
+    daily_quests = get_daily_guild_quests(guild_id)
+    daily_ids = [q['id'] for q in daily_quests]
+    
+    # Получаем уже взятые игроком квесты
+    cur.execute('SELECT quest_id FROM player_guild_quests WHERE player_id = ?', (player_id,))
+    taken = [row[0] for row in cur.fetchall()]
+    conn.close()
+    
+    # Возвращаем только те, которые ещё не взяты
+    available = [q for q in daily_quests if q['id'] not in taken]
+    
+    return available
+
 
 def get_quest_by_id(quest_id):
     conn = sqlite3.connect(DB_NAME)
@@ -64,6 +158,7 @@ def get_quest_by_id(quest_id):
             'extra_reward_rarity': row[9] or 1
         }
     return None
+
 
 async def take_guild_quest(vk, user_id, quest_id):
     print(f"📌 take_guild_quest: user_id={user_id}, quest_id={quest_id}")
@@ -104,6 +199,7 @@ async def take_guild_quest(vk, user_id, quest_id):
     await update_user_async(user_id, context=context)
 
     return True, f"✅ Квест '{quest['name']}' взят! Он будет выполнен через {quest['duration_minutes']} минут."
+
 
 async def complete_guild_quest(vk, user_id, quest_id):
     print(f"🔥🔥🔥 complete_guild_quest ВЫЗВАНА для user_id={user_id}, quest_id={quest_id}")
@@ -174,6 +270,7 @@ async def complete_guild_quest(vk, user_id, quest_id):
             except:
                 pass
 
+
 async def give_extra_reward(conn, cur, player_id, quest):
     reward_type = quest['extra_reward_type']
     reward_id = quest['extra_reward_id']
@@ -212,6 +309,7 @@ async def give_extra_reward(conn, cur, player_id, quest):
     else:
         return ""
 
+
 async def cancel_guild_quest(vk, user_id):
     char = await get_character_async(user_id)
     if not char:
@@ -238,6 +336,7 @@ async def cancel_guild_quest(vk, user_id):
     await update_user_async(user_id, context=context)
 
     return True, "❌ Квест отменён."
+
 
 async def get_active_guild_quest(user_id):
     char = await get_character_async(user_id)
@@ -269,3 +368,24 @@ async def get_active_guild_quest(user_id):
             'end_time': row[11]
         }
     return None
+
+
+async def refresh_guild_quests(vk, user_id):
+    """Принудительное обновление квестов гильдии (для теста)"""
+    char = await get_character_async(user_id)
+    if not char:
+        await send_message(vk, user_id, '❌ Сначала создайте персонажа.')
+        return
+    
+    guild = get_guild_by_character(char['id'])
+    if not guild:
+        await send_message(vk, user_id, '❌ Вы не состоите в гильдии.')
+        return
+    
+    conn = sqlite3.connect(DB_NAME)
+    cur = conn.cursor()
+    cur.execute('DELETE FROM guild_quests_daily WHERE guild_id = ?', (guild['id'],))
+    conn.commit()
+    conn.close()
+    
+    await send_message(vk, user_id, '🔄 Квесты гильдии обновлены!')

@@ -10,16 +10,17 @@ from utils import exp_to_next_level
 from guild import get_guild_by_character, send_guild_message
 
 TOWER_BOSSES = [
-    {'name': 'Глиняный Архивариус', 'hp': 40, 'attack': 7, 'defense': 2, 'exp': 150, 'silver': 80, 'image': 'photo-240828623_456239299'},
-    {'name': 'Ржавый Сенешаль', 'hp': 60, 'attack': 11, 'defense': 3, 'exp': 200, 'silver': 110, 'image': 'photo-240828623_456239291'},
-    {'name': 'Медуза Пустошей', 'hp': 80, 'attack': 15, 'defense': 5, 'exp': 250, 'silver': 140, 'image': 'photo-240828623_456239300'},
-    {'name': 'Громовой Костолом', 'hp': 100, 'attack': 18, 'defense': 6, 'exp': 300, 'silver': 170, 'image': 'photo-240828623_456239292'},
-    {'name': 'Немой Клирик', 'hp': 120, 'attack': 22, 'defense': 7, 'exp': 350, 'silver': 200, 'image': 'photo-240828623_456239294'},
-    {'name': 'Хрустальный Мясник', 'hp': 140, 'attack': 26, 'defense': 8, 'exp': 400, 'silver': 230, 'image': 'photo-240828623_456239295'},
-    {'name': 'Страж Пепельного Договора', 'hp': 160, 'attack': 30, 'defense': 10, 'exp': 450, 'silver': 260, 'image': 'photo-240828623_456239296'},
-    {'name': 'Гидра Обломков', 'hp': 180, 'attack': 33, 'defense': 11, 'exp': 500, 'silver': 290, 'image': 'photo-240828623_456239293'},
-    {'name': 'Последний Монарх', 'hp': 200, 'attack': 37, 'defense': 12, 'exp': 550, 'silver': 320, 'image': 'photo-240828623_456239298'},
-    {'name': 'Безликий Архимаг', 'hp': 220, 'attack': 41, 'defense': 14, 'exp': 600, 'silver': 350, 'image': 'photo-240828623_456239297'},
+    # name, hp, attack, defense, exp, silver, image
+    {'name': 'Глиняный Архивариус', 'hp': 400, 'attack': 25, 'defense': 5, 'exp': 100, 'silver': 200, 'image': 'photo-240828623_456239299'},
+    {'name': 'Ржавый Сенешаль', 'hp': 600, 'attack': 28, 'defense': 10, 'exp': 200, 'silver': 250, 'image': 'photo-240828623_456239291'},
+    {'name': 'Медуза Пустошей', 'hp': 800, 'attack': 31, 'defense': 15, 'exp': 300, 'silver': 300, 'image': 'photo-240828623_456239300'},
+    {'name': 'Громовой Костолом', 'hp': 1000, 'attack': 34, 'defense': 20, 'exp': 400, 'silver': 350, 'image': 'photo-240828623_456239292'},
+    {'name': 'Немой Клирик', 'hp': 1500, 'attack': 39, 'defense': 25, 'exp': 500, 'silver': 800, 'image': 'photo-240828623_456239294'},
+    {'name': 'Хрустальный Мясник', 'hp': 2000, 'attack': 49, 'defense': 30, 'exp': 600, 'silver': 950, 'image': 'photo-240828623_456239295'},
+    {'name': 'Страж Пепельного Договора', 'hp': 2200, 'attack': 57, 'defense': 35, 'exp': 700, 'silver': 1100, 'image': 'photo-240828623_456239296'},
+    {'name': 'Гидра Обломков', 'hp': 2500, 'attack': 65, 'defense': 40, 'exp': 800, 'silver': 1250, 'image': 'photo-240828623_456239293'},
+    {'name': 'Последний Монарх', 'hp': 2800, 'attack': 73, 'defense': 45, 'exp': 900, 'silver': 1400, 'image': 'photo-240828623_456239298'},
+    {'name': 'Безликий Архимаг', 'hp': 3000, 'attack': 80, 'defense': 50, 'exp': 1000, 'silver': 1550, 'image': 'photo-240828623_456239297'},
 ]
 
 def seed_tower_bosses():
@@ -70,6 +71,55 @@ async def create_tower_party(vk, leader_id):
         await _send_guild_invite(vk, leader_id)
         await send_tower_chat_message(vk, party_id, "Система", "🏰 Группа создана! Ожидайте участников.")
         return True, f"✅ Группа создана! Вы лидер.\n📌 Ваш ID: {leader_id}"
+
+async def invite_to_tower_party(vk, leader_id, invited_id):
+    """Пригласить игрока в группу башни"""
+    from vk_api.keyboard import VkKeyboard, VkKeyboardColor
+    
+    # Проверяем, существует ли группа
+    party = get_tower_party(leader_id)
+    if not party:
+        return False, "Группа не найдена."
+    
+    if party['leader_id'] != leader_id:
+        return False, "Только лидер может приглашать."
+    
+    if len(party['members']) >= 5:
+        return False, "Группа заполнена (макс. 5)."
+    
+    # Получаем данные приглашаемого
+    invited_char = get_character_by_id(invited_id)
+    if not invited_char:
+        return False, "Игрок не найден."
+    
+    # Проверяем, не в группе ли уже
+    if invited_id in party['members']:
+        return False, "Игрок уже в группе."
+    
+    # Проверяем, не в другой ли группе
+    existing_party = get_tower_party(invited_id)
+    if existing_party:
+        return False, "Игрок уже состоит в другой группе."
+    
+    # Создаем клавиатуру для приглашения
+    keyboard = VkKeyboard()
+    keyboard.add_button('✅ Присоединиться', color=VkKeyboardColor.POSITIVE,
+                        payload={'cmd': 'tower_accept_invite', 'leader_id': leader_id})
+    keyboard.add_button('❌ Отказаться', color=VkKeyboardColor.NEGATIVE,
+                        payload={'cmd': 'tower_decline_invite', 'leader_id': leader_id})
+    
+    leader_char = get_character_by_id(leader_id)
+    
+    # Отправляем приглашение
+    try:
+        await send_message(vk, invited_char['vk_id'],
+                          f"🏰 {leader_char['name']} приглашает вас в группу Башни!\n"
+                          f"📍 Текущий этаж: {party['current_floor']}\n"
+                          f"👥 Состав: {len(party['members'])}/5",
+                          keyboard)
+        return True, f"Приглашение отправлено игроку {invited_char['name']}"
+    except Exception as e:
+        return False, f"Не удалось отправить приглашение: {str(e)}"
 
 async def _send_guild_invite(vk, leader_id):
     from vk_api.keyboard import VkKeyboard, VkKeyboardColor
@@ -272,6 +322,7 @@ async def process_tower_battle(vk, leader_id):
         stats = cur.fetchone()
         if stats:
             party_stats.append({
+                'id': member_id,
                 'name': stats[0],
                 'hp': stats[1],
                 'max_hp': stats[2],
@@ -282,17 +333,19 @@ async def process_tower_battle(vk, leader_id):
                 'attack': stats[7],
                 'defense': stats[8],
                 'crit': stats[9],
-                'dodge': stats[10]
+                'dodge': stats[10],
+                'alive': stats[1] > 0
             })
     if not party_stats:
         conn.close()
         return False, "Нет данных о членах группы.", []
-    total_hp = sum(p['hp'] for p in party_stats)
+    
+    total_hp = sum(p['hp'] for p in party_stats if p['alive'])
     total_max_hp = sum(p['max_hp'] for p in party_stats)
-    total_attack = sum(p['attack'] for p in party_stats)
-    total_defense = sum(p['defense'] for p in party_stats)
-    avg_crit = sum(p['crit'] for p in party_stats) / len(party_stats)
-    avg_dodge = sum(p['dodge'] for p in party_stats) / len(party_stats)
+    total_attack = sum(p['attack'] for p in party_stats if p['alive'])
+    total_defense = sum(p['defense'] for p in party_stats if p['alive'])
+    avg_crit = sum(p['crit'] for p in party_stats if p['alive']) / max(1, len([p for p in party_stats if p['alive']]))
+    avg_dodge = sum(p['dodge'] for p in party_stats if p['alive']) / max(1, len([p for p in party_stats if p['alive']]))
     boss_hp = boss['hp']
     boss_max_hp = boss['max_hp']
     boss_attack = boss['attack']
@@ -304,14 +357,21 @@ async def process_tower_battle(vk, leader_id):
 
     while boss_hp > 0 and total_hp > 0 and round_num < max_rounds:
         round_num += 1
+        
+        alive_players = [p for p in party_stats if p['alive']]
+        if not alive_players:
+            await send_tower_chat_message(vk, party_id, "⚔️ Бой", "💀 ВСЕ ЧЛЕНЫ ГРУППЫ ПАЛИ!")
+            log.append("Группа пала")
+            break
+        
         group_damage = 0
         crit_triggered = False
-        for p in party_stats:
+        for p in alive_players:
             atk = p['attack']
             if random.random() * 100 < avg_crit:
                 atk = int(atk * 1.5)
                 crit_triggered = True
-            dmg = max(1, atk - boss_defense // len(party_stats))
+            dmg = max(1, atk - boss_defense // len(alive_players))
             group_damage += dmg
         total_damage = max(1, group_damage - boss_defense // 2)
         boss_hp -= total_damage
@@ -321,9 +381,11 @@ async def process_tower_battle(vk, leader_id):
         await send_tower_chat_message(vk, party_id, "⚔️ Бой",
                                f"🔴 Раунд {round_num}\n⚔️ Группа наносит {total_damage} урона{' (КРИТ!)' if crit_triggered else ''}\n❤️ Босс: {boss_hp}/{boss_max_hp} HP")
         await asyncio.sleep(0.7)
+        
         if boss_hp <= 0:
             break
-        target = random.choice(party_stats)
+        
+        target = random.choice(alive_players)
         dodge_chance = avg_dodge
         if random.random() * 100 < dodge_chance:
             await send_tower_chat_message(vk, party_id, "⚔️ Бой", f"💨 Босс атакует {target['name']}, но тот уклоняется!")
@@ -335,17 +397,30 @@ async def process_tower_battle(vk, leader_id):
             target['hp'] -= damage
             if target['hp'] < 0:
                 target['hp'] = 0
-            total_hp = sum(p['hp'] for p in party_stats)
+            
+            if target['hp'] <= 0:
+                target['alive'] = False
+                await send_tower_chat_message(vk, party_id, "⚔️ Бой", f"💀 {target['name']} погиб!")
+                log.append(f"{target['name']} погиб")
+            
+            total_hp = sum(p['hp'] for p in party_stats if p['alive'])
+            
             await send_tower_chat_message(vk, party_id, "⚔️ Бой",
                                    f"💢 Босс атакует {target['name']} на {damage} урона\n❤️ {target['name']}: {target['hp']}/{target['max_hp']} HP")
             log.append(f"Босс нанёс {damage} урона {target['name']}")
             await asyncio.sleep(0.7)
+        
         if total_hp <= 0:
             await send_tower_chat_message(vk, party_id, "⚔️ Бой", "💀 ВСЕ ЧЛЕНЫ ГРУППЫ ПАЛИ!")
             log.append("Группа пала")
             break
 
+    # Обновляем HP в базе данных
+    for p in party_stats:
+        cur.execute('UPDATE characters SET hp = ? WHERE id = ?', (p['hp'], p['id']))
+
     if boss_hp <= 0:
+        # ... (код победы без изменений)
         exp_gain = boss['exp']
         silver_gain = boss['silver']
         for member_id in party['members']:
@@ -380,31 +455,52 @@ async def process_tower_battle(vk, leader_id):
         conn.close()
         for member_id in party['members']:
             await recalc_stats_async(member_id)
-        leader_char = await get_character_by_id_async(leader_id)
-        if leader_char:
-            await send_message(vk, leader_char['vk_id'],
-                         f"⚔️ Победа над {boss['name']}!\n\n" + "\n".join(log[-10:]) +
-                         f"\n\n✨ Все получили {exp_gain} опыта и {silver_gain} серебра\n⬆️ Переход на этаж {new_floor}")
+        
+        for member_id in party['members']:
+            char = await get_character_by_id_async(member_id)
+            if char:
+                await send_message(vk, char['vk_id'],
+                             f"⚔️ Победа над {boss['name']}!\n\n" + "\n".join(log[-10:]) +
+                             f"\n\n✨ Все получили {exp_gain} опыта и {silver_gain} серебра\n⬆️ Переход на этаж {new_floor}")
+        
         await send_tower_chat_message(vk, party_id, "⚔️ Бой",
                                f"🎉 ПОБЕДА!\n✨ Все получили {exp_gain} опыта и {silver_gain} серебра\n⬆️ Переход на этаж {new_floor}")
         return True, "Победа!", log
     else:
+        # ===== ПОРАЖЕНИЕ =====
+        # Накладываем дебафф на всех
         for member_id in party['members']:
             cur.execute('UPDATE characters SET debuff = 2 WHERE id = ?', (member_id,))
             cur.execute('UPDATE characters SET hp = max_hp / 2, mana = max_mana / 2, stamina = max_stamina / 2 WHERE id = ?', (member_id,))
         cur.execute('UPDATE tower_party SET active = 0 WHERE id = ?', (party['id'],))
         conn.commit()
         conn.close()
+        
+        # Пересчет статов для всех
         for member_id in party['members']:
             await recalc_stats_async(member_id)
-        leader_char = await get_character_by_id_async(leader_id)
-        if leader_char:
-            await send_message(vk, leader_char['vk_id'],
-                         f"💀 Поражение от {boss['name']}...\n\n" + "\n".join(log[-10:]) +
-                         "\n\nГруппа разбита. Все получили Печать башни (-50% к статам).")
+        
+        # Отправляем сообщение о поражении и перенаправляем КАЖДОГО в Собор
+        from locations import show_church
+        
+        for member_id in party['members']:
+            char = await get_character_by_id_async(member_id)
+            if char:
+                # Отправляем сообщение
+                await send_message(vk, char['vk_id'],
+                             f"💀 Поражение от {boss['name']}...\n\n" + "\n".join(log[-10:]) +
+                             "\n\nГруппа разбита. Вы получили Печать башни (-50% к статам).\n\n🏛️ Вы направлены в Собор для снятия проклятия.")
+                
+                # Обновляем состояние
+                await update_user_async(char['vk_id'], state='church', context={'parent_state': 'meadow'})
+                
+                # ОТКРЫВАЕМ СОБОР ДЛЯ КАЖДОГО
+                await show_church(vk, char['vk_id'])
+        
         await send_tower_chat_message(vk, party_id, "⚔️ Бой",
                                "💀 ПОРАЖЕНИЕ!\nГруппа разбита. Все получили Печать башни (-50% к статам).")
-        return False, "Поражение!", log
+        
+        return False, "Поражение! Вы направлены в Собор.", log
 
 async def rest_in_tower(character_id):
     party = await asyncio.to_thread(get_tower_party, character_id)
@@ -463,3 +559,27 @@ async def handle_tower_accept_guild_invite(vk, user_id, leader_id):
     else:
         from locations import show_tower
         await show_tower(vk, user_id)
+
+async def handle_tower_accept_invite(vk, user_id, leader_id):
+    """Обработчик принятия личного приглашения в группу"""
+    char = await get_character_async(user_id)
+    if not char:
+        await send_message(vk, user_id, 'Сначала создайте персонажа.')
+        return
+    
+    existing_party = await asyncio.to_thread(get_tower_party, char['id'])
+    if existing_party:
+        await send_message(vk, user_id, 'Вы уже состоите в группе!')
+        return
+    
+    success, msg = await join_tower_party(vk, leader_id, char['id'])
+    await send_message(vk, user_id, msg)
+    if success:
+        await update_user_async(user_id, state='tower', context={'parent_state': 'meadow'})
+        await asyncio.sleep(0.3)
+        from locations import show_tower
+        await show_tower(vk, user_id)
+
+async def handle_tower_decline_invite(vk, user_id, leader_id=None):
+    """Обработчик отказа от приглашения"""
+    await send_message(vk, user_id, '❌ Вы отказались от приглашения.')
