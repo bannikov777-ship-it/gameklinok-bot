@@ -568,20 +568,46 @@ async def main_loop():
         print("❌ Ошибка инициализации. Бот не запущен.")
         return
     
+    # Запускаем планировщик
     asyncio.create_task(scheduler.run())
+    
+    # Даём время на запуск планировщика
+    await asyncio.sleep(1)
     
     while True:
         try:
             print("🔄 Подключение к VK API...")
-            await bot.run_polling()
+            # Добавляем обработку прерываний
+            try:
+                await bot.run_polling()
+            except KeyboardInterrupt:
+                print("🛑 Бот остановлен вручную")
+                return
+            except Exception as e:
+                print(f"❌ Ошибка в polling: {e}")
+                traceback.print_exc()
+            
+            print("⚠️ Соединение потеряно. Переподключение через 10 секунд...")
+            await asyncio.sleep(10)
+            
+        except asyncio.CancelledError:
+            print("🛑 Цикл отменён")
+            return
         except Exception as e:
-            print(f"❌ Ошибка: {e}")
+            print(f"❌ Критическая ошибка: {e}")
             traceback.print_exc()
-            print("🔄 Переподключение через 15 секунд...")
+            print("🔄 Перезапуск через 15 секунд...")
             await asyncio.sleep(15)
 
 async def main():
-    await main_loop()
+    """Основная точка входа"""
+    try:
+        await main_loop()
+    except KeyboardInterrupt:
+        print("🛑 Бот остановлен")
+    except Exception as e:
+        print(f"❌ Фатальная ошибка: {e}")
+        traceback.print_exc()
 
 if __name__ == "__main__":
     asyncio.run(main())
