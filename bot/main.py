@@ -560,11 +560,15 @@ async def main_loop():
             print("🔄 Переподключение через 15 секунд...")
             await asyncio.sleep(15)
 
-async def main():
-    await main_loop()
-
-if __name__ == "__main__":
-    asyncio.run(main())
+async def main_loop():
+    """Основной цикл с переподключением"""
+    print("🚀 Запуск бота...")
+    
+    if not initialize_database():
+        print("❌ Ошибка инициализации. Бот не запущен.")
+        return
+    
+    asyncio.create_task(scheduler.run())
     
     while True:
         try:
