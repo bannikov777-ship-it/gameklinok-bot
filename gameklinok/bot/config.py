@@ -1,8 +1,8 @@
 # config.py
 import os
 
-TOKEN = 'vk1.a.tPSwEY7iUAcEj86iTEyro-HgT9QLm02Dlj2e39A4hVlBoioM9tUoBKFFZBg9b0HzHkecsunm4IENvXETwzTM43RFF6--DZSYqdPiJ9CA53O4BzXMMR9hX8I3j2il2VkNXWg_7LQ29WujhDNY6NM4qozkkR3dHaw77o9OPosLZy_JTsDJ3VTNgxmRatkbhlmzCei7Gj9luO5IWW5hhj772Q'
-GROUP_ID = 241016336
+TOKEN = 'vk1.a.C8YkpInT8BNfXpS3Y1nNq1d47R8OAwbmndKLjJyMSSXCC8OCxJ_Q373H1i2cXXkJZ-brzDjPSYox3ZMmJqJRCkyJUbIfomE0WMkMhwNI6acKj73jns7-vBr_-kVvcMOaewb3I4l-fDjPXka110iiinSx_oZlg9kc4aY144fQviIQy1JaZsNzLjs_WA34wFJIaQTyRHcwtPJci7_OptOutg'
+GROUP_ID = 240828623
 
 DB_NAME = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'game.db')
 print(f"📁 Путь к базе данных: {DB_NAME}")
