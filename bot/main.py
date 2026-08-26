@@ -1,7 +1,6 @@
-# main.py (исправленный)
+# main.py - исправленный для хостинга
 import sys
 import os
-# Добавляем текущую папку в путь поиска модулей
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import asyncio
@@ -20,7 +19,7 @@ from resources import seed_resources
 from crafting import seed_craft_recipes
 from quests import seed_hunter_quests
 from tower import seed_tower_bosses, get_tower_party, send_tower_chat_message, invite_to_tower_party
-from guild import create_guild, get_guild_by_character, send_guild_message, get_guild_members  # ✅ добавлен get_guild_members
+from guild import create_guild, get_guild_by_character, send_guild_message, get_guild_members
 from scheduler import scheduler
 from locations import (handle_callback, show_city, show_guild, show_tower,
                        show_market, show_healer, show_auction, show_smithy,
@@ -48,7 +47,6 @@ from keyboards import (get_gender_keyboard, get_back_keyboard, get_lore_keyboard
                        get_mail_attachment_keyboard)
 from guild_quests import refresh_guild_quests
 from admin import admin_codes_menu, admin_create_code, admin_show_codes, is_admin
-
 
 logging.basicConfig(level=logging.INFO)
 
@@ -87,57 +85,12 @@ def initialize_database():
 
 bot = Bot(token=TOKEN)
 
-def leave_tower_and_exit(character_id):
-    """
-    Выход из башни с автоматическим покиданием группы.
-    Если лидер - группа распускается, всех переносит на луг.
-    """
-    party = get_tower_party(character_id)
-    if not party:
-        return False, "Вы не в группе башни.", None
-    
-    conn = sqlite3.connect(DB_NAME)
-    cur = conn.cursor()
-    
-    is_leader = party['leader_id'] == character_id
-    members = party['members']
-    all_members = [party['leader_id']] + members
-    
-    if is_leader:
-        # Лидер выходит - распускаем группу
-        # Удаляем группу
-        cur.execute('DELETE FROM tower_party WHERE id = ?', (party['id'],))
-        
-        # Переносим всех участников на луг
-        for member_id in all_members:
-            # Обновляем состояние пользователя на 'meadow'
-            cur.execute('UPDATE users SET state = "meadow", context = "{}" WHERE vk_id = (SELECT vk_id FROM characters WHERE id = ?)', (member_id,))
-        
-        conn.commit()
-        conn.close()
-        
-        return True, "Группа распущена. Все участники перенесены на луг.", all_members
-    else:
-        # Участник выходит
-        members.remove(character_id)
-        cur.execute('UPDATE tower_party SET members = ? WHERE id = ?', 
-                   (json.dumps(members), party['id']))
-        
-        # Переносим только вышедшего на луг
-        cur.execute('UPDATE users SET state = "meadow", context = "{}" WHERE vk_id = (SELECT vk_id FROM characters WHERE id = ?)', (character_id,))
-        
-        conn.commit()
-        conn.close()
-        
-        return True, "Вы покинули группу и перенесены на луг.", [character_id]
-
 @bot.on.message()
 async def message_handler(message: Message):
     user_id = message.peer_id
     text = message.text or ""
     payload = message.payload
 
-    # Обработка callback (кнопок)
     if payload:
         try:
             payload_dict = json.loads(payload)
@@ -154,45 +107,29 @@ async def message_handler(message: Message):
         except json.JSONDecodeError:
             pass
 
-    # Обработка текстовых сообщений ТОЛЬКО в определенных состояниях
     if text:
         try:
             user_data = await get_user_async(user_id)
             state = user_data['state']
             
-            # Список состояний, в которых мы ожидаем ввод текста
             text_input_states = [
-                'awaiting_name',              # ввод имени персонажа
-                'awaiting_gender',            # выбор пола (обрабатывается через кнопки)
-                'awaiting_guild_name',        # ввод названия гильдии
-                'awaiting_guild_donate',      # ввод суммы для пополнения казны
-                'awaiting_guild_withdraw',    # ввод суммы для снятия из казны
-                'awaiting_tower_message',     # ввод сообщения в чат башни
-                'awaiting_guild_message',     # ввод сообщения в чат гильдии
-                'awaiting_guild_manage_id',  # ввод ID для управления в гильдии
-                'awaiting_auction_price',     # ввод цены на аукционе
-                'awaiting_auction_buy_id',    # ввод ID лота для покупки
-                'awaiting_mail_recipient',    # ввод получателя письма
-                'awaiting_mail_subject',      # ввод темы письма
-                'awaiting_mail_body',         # ввод тела письма
-                'awaiting_mail_attach_money', # ввод суммы для вложения
-                'awaiting_mail_attach_qty',   # ввод количества для вложения
-                'awaiting_guild_apply',       # ввод ID гильдии для заявки
-                'awaiting_guild_storage_remove',  # ввод ID предмета для изъятия
-                'awaiting_premium_buy',       # ввод ID товара в премиум-магазине
-                'awaiting_code',              # ввод промокода
-                'awaiting_inventory_equip_id',    # ввод ID предмета для экипировки
-                'awaiting_inventory_unequip_id',  # ввод ID предмета для снятия
-                'awaiting_tower_invite',      # ввод ID для приглашения в башню
-                'awaiting_code',  # ввод промокода
-                'scrolls',  # просмотр свитков
+                'awaiting_name', 'awaiting_gender', 'awaiting_guild_name',
+                'awaiting_guild_donate', 'awaiting_guild_withdraw',
+                'awaiting_tower_message', 'awaiting_guild_message',
+                'awaiting_guild_manage_id', 'awaiting_auction_price',
+                'awaiting_auction_buy_id', 'awaiting_mail_recipient',
+                'awaiting_mail_subject', 'awaiting_mail_body',
+                'awaiting_mail_attach_money', 'awaiting_mail_attach_qty',
+                'awaiting_guild_apply', 'awaiting_guild_storage_remove',
+                'awaiting_premium_buy', 'awaiting_code',
+                'awaiting_inventory_equip_id', 'awaiting_inventory_unequip_id',
+                'awaiting_tower_invite', 'scrolls'
             ]
             
-            # Если состояние НЕ в списке ожидаемых - игнорируем сообщение
             if state not in text_input_states:
                 return
 
-            # ---- ОБРАБОТКА ВВОДА ИМЕНИ (второй шаг) ----
+            # ---- ОБРАБОТКА ВВОДА ИМЕНИ ----
             if state == 'awaiting_name':
                 name = text.strip()
                 if len(name) < 2:
@@ -204,7 +141,6 @@ async def message_handler(message: Message):
                 if not gender:
                     await send_message(bot.api, user_id, '❌ Ошибка: пол не выбран. Начните заново.', get_back_keyboard('город'))
                     return
-                # Создаём персонажа
                 await asyncio.to_thread(create_character, user_id, name, gender)
                 await send_message(bot.api, user_id, f'🎉 Поздравляю, {name}!\nТы выбрал пол: {"♂ Мужской" if gender == "male" else "♀ Женский"}.\nТеперь ты в Стальном Троне.\n\nДостигни 20 уровня, чтобы выбрать класс в Ратуше.', get_back_keyboard('город'))
                 await show_city(bot.api, user_id)
@@ -291,7 +227,7 @@ async def message_handler(message: Message):
                     await send_message(bot.api, user_id, '❌ Введите целое число (например, 100).', get_back_keyboard('гильдию'))
                 return
 
-            # ---- ЧАТ БАШНИ (ввод сообщения) ----
+            # ---- ЧАТ БАШНИ ----
             if state == 'awaiting_tower_message':
                 char = await get_character_async(user_id)
                 if not char:
@@ -308,7 +244,7 @@ async def message_handler(message: Message):
                 await update_user_async(user_id, state='tower_chat', context={'parent_state': 'tower'})
                 return
 
-            # ---- ЧАТ ГИЛЬДИИ (ввод сообщения) ----
+            # ---- ЧАТ ГИЛЬДИИ ----
             if state == 'awaiting_guild_message':
                 char = await get_character_async(user_id)
                 if not char:
@@ -323,16 +259,6 @@ async def message_handler(message: Message):
                 await send_guild_message(bot.api, char['id'], guild['id'], text)
                 await send_message(bot.api, user_id, '✅ Сообщение отправлено в чат гильдии!', get_guild_chat_keyboard())
                 await update_user_async(user_id, state='guild_chat', context={'parent_state': 'guild'})
-                return
-
-            # ---- ПОДАЧА ЗАЯВКИ В ГИЛЬДИЮ (ввод ID) ----
-            if state == 'awaiting_guild_apply':
-                try:
-                    guild_id = int(text.strip())
-                    from locations.guild import show_guild_apply_confirm
-                    await show_guild_apply_confirm(bot.api, user_id, guild_id)
-                except ValueError:
-                    await send_message(bot.api, user_id, '❌ Введите число (ID гильдии).', get_back_keyboard('гильдию'))
                 return
 
             # ---- УПРАВЛЕНИЕ ГИЛЬДИЕЙ ПО ID ----
@@ -364,6 +290,10 @@ async def message_handler(message: Message):
                         await send_message(bot.api, user_id, f'❌ Участник с ID {member_id} не найден в гильдии.', get_back_keyboard('гильдию'))
                         return
                     
+                    if target['id'] == char['id']:
+                        await send_message(bot.api, user_id, '❌ Нельзя управлять самим собой.', get_back_keyboard('гильдию'))
+                        return
+                    
                     from locations.guild import show_guild_manage_member_by_id
                     await show_guild_manage_member_by_id(bot.api, user_id, member_id)
                     
@@ -371,7 +301,7 @@ async def message_handler(message: Message):
                     await send_message(bot.api, user_id, '❌ Введите число (ID участника).', get_back_keyboard('гильдию'))
                 return
 
-            # ---- ИЗЪЯТИЕ ПРЕДМЕТА СО СКЛАДА (ввод ID) ----
+            # ---- ИЗЪЯТИЕ ПРЕДМЕТА СО СКЛАДА ----
             if state == 'awaiting_guild_storage_remove':
                 try:
                     storage_id = int(text.strip())
@@ -453,7 +383,6 @@ async def message_handler(message: Message):
                     user_data = await get_user_async(user_id)
                     context = user_data['context']
                     
-                    # Проверяем, что у нас есть получатель и тема
                     if not context.get('mail_recipient_id'):
                         await send_message(bot.api, user_id, '❌ Ошибка: получатель не найден. Попробуйте начать заново.', get_mail_keyboard())
                         return
@@ -483,7 +412,6 @@ async def message_handler(message: Message):
                     user_data = await get_user_async(user_id)
                     context = user_data['context']
                     
-                    # Проверяем, что у нас есть получатель и тема
                     if not context.get('mail_recipient_id'):
                         await send_message(bot.api, user_id, '❌ Ошибка: получатель не найден. Попробуйте начать заново.', get_mail_keyboard())
                         return
@@ -502,7 +430,7 @@ async def message_handler(message: Message):
                     await send_message(bot.api, user_id, '❌ Введите целое число.', get_mail_attachment_keyboard())
                 return
 
-            # ---- ВВОД ПРОМОКОДА ----
+            # ---- ПРОМОКОДЫ ----
             if state == 'awaiting_code':
                 from locations.codes import process_code_enter
                 await process_code_enter(bot.api, user_id, text)
@@ -518,24 +446,22 @@ async def message_handler(message: Message):
                     await send_message(bot.api, user_id, '❌ Введите число (ID предмета).', get_back_keyboard('инвентарь'))
                 return
 
-               # ---- ИНВЕНТАРЬ - СНЯТИЕ ПО ID ----
+            # ---- ИНВЕНТАРЬ - СНЯТИЕ ПО ID ----
             if state == 'awaiting_inventory_unequip_id':
                 try:
                     item_id = int(text.strip())
                     if item_id <= 0:
                         await send_message(bot.api, user_id, '❌ ID должен быть положительным числом.', get_back_keyboard('инвентарь'))
                         return
-        
-                   # Находим предмет в экипировке
+                    
                     from core import get_equipment, unequip_item
                     char = await get_character_async(user_id)
                     if not char:
                         await send_message(bot.api, user_id, 'Сначала создайте персонажа.', get_back_keyboard('город'))
                         return
-        
+                    
                     equipment = get_equipment(char['id'])
-        
-                # Ищем предмет по ID в экипировке
+                    
                     slot_found = None
                     item_name = None
                     for slot, item in equipment.items():
@@ -543,12 +469,11 @@ async def message_handler(message: Message):
                             slot_found = slot
                             item_name = item.get('name', 'Предмет')
                             break
-        
+                    
                     if not slot_found:
                         await send_message(bot.api, user_id, f'❌ Предмет с ID {item_id} не найден в экипировке.', get_back_keyboard('инвентарь'))
                         return
-           
-                      # Снимаем предмет
+                    
                     success = unequip_item(char['id'], slot_found)
                     if success:
                         from core import recalc_stats_async
@@ -556,10 +481,10 @@ async def message_handler(message: Message):
                         await send_message(bot.api, user_id, f'✅ {item_name} снят в инвентарь!', get_back_keyboard('инвентарь'))
                     else:
                         await send_message(bot.api, user_id, '❌ Не удалось снять предмет.', get_back_keyboard('инвентарь'))
-        
+                    
                     from locations.inventory import show_inventory
                     await show_inventory(bot.api, user_id)
-        
+                    
                 except ValueError:
                     await send_message(bot.api, user_id, '❌ Введите число (ID предмета).', get_back_keyboard('инвентарь'))
                 return
@@ -577,7 +502,6 @@ async def message_handler(message: Message):
                         await send_message(bot.api, user_id, 'Сначала создайте персонажа.', get_back_keyboard('город'))
                         return
                     
-                    # Проверяем, что приглашаемый существует (по ID персонажа)
                     conn = sqlite3.connect(DB_NAME)
                     cur = conn.cursor()
                     cur.execute('SELECT id, name FROM characters WHERE id = ?', (invited_id,))
@@ -594,7 +518,6 @@ async def message_handler(message: Message):
                         await update_user_async(user_id, state='tower', context={'parent_state': 'meadow'})
                         return
                     
-                    # Передаём ID персонажа лидера (char['id']) и ID приглашаемого (invited_id)
                     success, msg = await invite_to_tower_party(char['id'], invited_id)
                     await send_message(bot.api, user_id, f'{"✅" if success else "❌"} {msg}')
                     
@@ -615,19 +538,30 @@ async def message_handler(message: Message):
                 "⚠️ Произошла ошибка. Пожалуйста, сообщите разработчику.\n"
                 "Вы будете перенаправлены в город.")
             await show_city(bot.api, user_id)
-    # Если текст есть, но состояние не в списке - просто игнорируем
 
-async def handle_main(vk, user_id, text):
-    """Основной обработчик сообщений (вызывается только из callback)"""
-    # Эта функция больше не нужна, так как текстовые сообщения обрабатываются в message_handler
-    pass
 
-async def main():
+async def main_loop():
+    """Основной цикл с переподключением"""
+    print("🚀 Запуск бота...")
+    
     if not initialize_database():
         print("❌ Ошибка инициализации. Бот не запущен.")
         return
+    
     asyncio.create_task(scheduler.run())
-    await bot.run_polling()
+    
+    while True:
+        try:
+            print("🔄 Подключение к VK API...")
+            await bot.run_polling()
+        except Exception as e:
+            print(f"❌ Ошибка: {e}")
+            traceback.print_exc()
+            print("🔄 Переподключение через 15 секунд...")
+            await asyncio.sleep(15)
+
+async def main():
+    await main_loop()
 
 if __name__ == "__main__":
     asyncio.run(main())
