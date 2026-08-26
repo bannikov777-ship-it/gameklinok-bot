@@ -565,3 +565,19 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+    
+    while True:
+        try:
+            print("🔄 Подключение к VK API...")
+            await bot.run_polling()
+        except Exception as e:
+            print(f"❌ Ошибка: {e}")
+            traceback.print_exc()
+            print("🔄 Переподключение через 15 секунд...")
+            await asyncio.sleep(15)
+
+async def main():
+    await main_loop()
+
+if __name__ == "__main__":
+    asyncio.run(main())
