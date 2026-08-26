@@ -18,7 +18,7 @@ async def show_tower(vk, user_id):
     if not party:
         keyboard = VkKeyboard()
         keyboard.add_button('🏰 Создать группу', color=VkKeyboardColor.PRIMARY, payload={'cmd': 'tower_create_party'})
-        keyboard.add_button('🔙 Назад', color=VkKeyboardColor.SECONDARY, payload={'cmd': 'back'})
+        keyboard.add_button('🌿 На луг', color=VkKeyboardColor.SECONDARY, payload={'cmd': 'go_meadow'})  # ✅ исправлено
         await send_message(vk, user_id, '🗼 Вы у входа в Башню.\n\nВы не состоите в группе. Создайте её, чтобы начать.', keyboard)
     else:
         from core import get_character_by_id_async
@@ -32,7 +32,7 @@ async def show_tower(vk, user_id):
             keyboard.add_button('⚔️ Начать бой', color=VkKeyboardColor.PRIMARY, payload={'cmd': 'tower_start_battle'})
         keyboard.add_line()
         keyboard.add_button('🚪 Покинуть группу', color=VkKeyboardColor.NEGATIVE, payload={'cmd': 'tower_leave'})
-        keyboard.add_button('🔙 Назад', color=VkKeyboardColor.SECONDARY, payload={'cmd': 'back'})
+        keyboard.add_button('🌿 На луг', color=VkKeyboardColor.SECONDARY, payload={'cmd': 'go_meadow'})  # ✅ исправлено
         await send_message(vk, user_id, text, keyboard)
     user_data = await get_user_async(user_id)
     context = user_data['context']

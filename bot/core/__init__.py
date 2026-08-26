@@ -7,6 +7,7 @@ from .character import (
     get_item_prefix
 )
 from .user import get_user, add_user, update_user
+from .resources import get_player_resources, add_resource, remove_resource 
 from .messaging import send_message
 from .stats import recalc_stats, CLASS_BASE_STATS, CLASS_GROWTH, NEUTRAL_STATS, NEUTRAL_GROWTH
 from .render import render_profile, render_inventory, upload_profile_image, format_gender
@@ -40,5 +41,6 @@ __all__ = [
     'use_consumable', 'get_consumable_templates', 'get_player_herbs',
     'add_herb', 'sell_all_herbs',
     'get_equipment', 'get_inventory', 'equip_item', 'unequip_item',
-    'generate_shop_item', 'get_item_stats', 'get_item_template_id_by_name'
+    'generate_shop_item', 'get_item_stats', 'get_item_template_id_by_name',
+    'get_player_resources', 'add_resource', 'remove_resource' 
 ]

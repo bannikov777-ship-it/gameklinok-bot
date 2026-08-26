@@ -61,17 +61,28 @@ def recalc_stats(character_id):
     
     # Добавление бонусов от экипировки
     equipped = get_equipped_items(character_id)
+    
+    # ИНИЦИАЛИЗИРУЕМ ПЕРЕМЕННЫЕ ДО ЦИКЛА
+    crit_bonus = 0
+    dodge_bonus = 0
+    
     for slot, item in equipped.items():
-        base_attack += item['attack']
-        base_defense += item['defense']
-        base_hp += item['hp']
-        base_mana += item['mana']
+        base_attack += item.get('attack', 0)
+        base_defense += item.get('defense', 0)
+        base_hp += item.get('hp', 0)
+        base_mana += item.get('mana', 0)
+        crit_bonus += item.get('bonus_crit', 0)
+        dodge_bonus += item.get('bonus_dodge', 0)
+    
+    # Итоговые крит и уворот
+    final_crit = max(0, base_crit + crit_bonus)
+    final_dodge = max(0, base_dodge + dodge_bonus)
     
     cur.execute('''UPDATE characters
                    SET attack = ?, defense = ?, max_hp = ?, max_mana = ?, 
                        max_stamina = ?, crit_chance = ?, dodge_chance = ?
                    WHERE id = ?''', 
-                (base_attack, base_defense, base_hp, base_mana, base_stamina, base_crit, base_dodge, character_id))
+                (base_attack, base_defense, base_hp, base_mana, base_stamina, round(final_crit), round(final_dodge), character_id))
     cur.execute('UPDATE characters SET hp = MIN(hp, max_hp), mana = MIN(mana, max_mana), stamina = MIN(stamina, max_stamina) WHERE id = ?', (character_id,))
     conn.commit()
     conn.close()

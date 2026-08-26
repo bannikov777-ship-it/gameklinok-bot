@@ -1,7 +1,7 @@
-# core/database.py
+# core/database.py (полный исправленный)
 import sqlite3
 import json
-from config import DB_NAME 
+from config import DB_NAME
 
 def init_db():
     """Инициализация базы данных"""
@@ -48,7 +48,9 @@ def init_db():
             trophies INTEGER DEFAULT 0,
             materials TEXT DEFAULT '{}',
             guild_exp_contributed INTEGER DEFAULT 0,
-            guild_quests_completed INTEGER DEFAULT 0
+            guild_quests_completed INTEGER DEFAULT 0,
+            vip INTEGER DEFAULT 0,
+            vip_expires_at TIMESTAMP DEFAULT NULL
         )
     ''')
     
@@ -120,7 +122,25 @@ def init_db():
             level INTEGER DEFAULT 1,
             rarity INTEGER DEFAULT 1,
             upgrade_level INTEGER DEFAULT 0,
-            quantity INTEGER DEFAULT 1
+            quantity INTEGER DEFAULT 1,
+            item_type TEXT DEFAULT 'item',
+            name TEXT DEFAULT 'Неизвестный предмет'
+        )
+    ''')
+    
+    # guild_applications
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS guild_applications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id INTEGER NOT NULL,
+            player_id INTEGER NOT NULL,
+            status TEXT DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            reviewed_at TIMESTAMP,
+            reviewed_by INTEGER,
+            FOREIGN KEY (guild_id) REFERENCES guilds(id),
+            FOREIGN KEY (player_id) REFERENCES characters(id),
+            FOREIGN KEY (reviewed_by) REFERENCES characters(id)
         )
     ''')
     
@@ -202,6 +222,18 @@ def init_db():
             base_defense INTEGER,
             exp_reward INTEGER,
             silver_reward INTEGER
+        )
+    ''')
+    
+    # tower_invites
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS tower_invites (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            party_id INTEGER,
+            invited_id INTEGER,
+            leader_id INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            status TEXT DEFAULT 'pending'
         )
     ''')
     
@@ -318,6 +350,17 @@ def init_db():
         )
     ''')
     
+    # guild_quests_daily
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS guild_quests_daily (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id INTEGER,
+            date TEXT,
+            quests TEXT DEFAULT '[]',
+            UNIQUE(guild_id, date)
+        )
+    ''')
+    
     # item_templates
     cur.execute('''
         CREATE TABLE IF NOT EXISTS item_templates (
@@ -332,7 +375,9 @@ def init_db():
             growth_defense REAL DEFAULT 0.1,
             growth_hp REAL DEFAULT 0.1,
             growth_mana REAL DEFAULT 0.1,
-            icon TEXT DEFAULT '🗡️'
+            icon TEXT DEFAULT '🗡️',
+            bonus_crit INTEGER DEFAULT 0,
+            bonus_dodge INTEGER DEFAULT 0
         )
     ''')
     
@@ -351,10 +396,22 @@ def init_db():
         )
     ''')
     
-    # equipment - ПЕРЕСОЗДАЕМ ТАБЛИЦУ ПРИ КАЖДОМ ЗАПУСКЕ
-    cur.execute("DROP TABLE IF EXISTS equipment")
+    # premium_shop
     cur.execute('''
-        CREATE TABLE equipment (
+        CREATE TABLE IF NOT EXISTS premium_shop (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            description TEXT,
+            icon TEXT,
+            price INTEGER,
+            item_type TEXT,
+            item_data TEXT
+        )
+    ''')
+    
+    # ✅ Исправлено: equipment создаётся только если не существует
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS equipment (
             character_id INTEGER,
             slot TEXT,
             player_item_id INTEGER,
@@ -368,7 +425,6 @@ def init_db():
     conn.close()
     print("✅ База данных инициализирована")
 
-    # core/database.py - добавьте в конец файла
 
 def seed_cities():
     """Заполнение городов"""
@@ -383,28 +439,6 @@ def seed_cities():
         cur.executemany('INSERT INTO cities (id, name, description, image_attachment) VALUES (?, ?, ?, ?)', cities)
         conn.commit()
     conn.close()
-
-def update_item_templates():
-    """Добавляет новые колонки в таблицу item_templates если их нет"""
-    conn = sqlite3.connect(DB_NAME)
-    cur = conn.cursor()
-    
-    # Проверяем существующие колонки
-    cur.execute("PRAGMA table_info(item_templates)")
-    columns = [col[1] for col in cur.fetchall()]
-    
-    # Добавляем колонку bonus_crit если её нет
-    if 'bonus_crit' not in columns:
-        cur.execute('ALTER TABLE item_templates ADD COLUMN bonus_crit INTEGER DEFAULT 0')
-        print("✅ Добавлена колонка bonus_crit")
-    
-    # Добавляем колонку bonus_dodge если её нет
-    if 'bonus_dodge' not in columns:
-        cur.execute('ALTER TABLE item_templates ADD COLUMN bonus_dodge INTEGER DEFAULT 0')
-        print("✅ Добавлена колонка bonus_dodge")
-    
-    conn.commit()
-    conn.close()    
 
 
 def seed_consumables():
@@ -423,9 +457,10 @@ def seed_consumables():
             ('Слабое зелье выносливости', 'Восстанавливает 10% выносливости', '⚡', 'stamina', 10, 20),
             ('Среднее зелье выносливости', 'Восстанавливает 25% выносливости', '⚡', 'stamina', 25, 250),
             ('Сильное зелье выносливости', 'Восстанавливает 40% выносливости', '⚡', 'stamina', 40, 1000),
-            ('Голубой кристалл', 'Увеличивает шанс заточки на 15%', '🔵', 'crystal', 15, 200),
-            ('Фиолетовый кристалл', 'Увеличивает шанс заточки на 40%', '🟣', 'crystal', 40, 500),
-            ('Красный кристалл', 'Увеличивает шанс заточки на 70%', '🔴', 'crystal', 70, 1200),
+            ('Голубой кристалл', 'Для заточки оружия и брони. Увеличивает шанс заточки на 15%', '🔵', 'crystal', 15, 200),
+            ('Фиолетовый кристалл', 'Для заточки оружия и брони. Увеличивает шанс заточки на 35%', '🟣', 'crystal', 35, 500),
+            ('Красный кристалл', 'Для заточки оружия и брони. Увеличивает шанс заточки на 55%', '🔴', 'crystal', 55, 1200),
+            ('Свиток снятия проклятия', 'Снимает любое проклятие или печать башни', '📜', 'curse_remove', 0, 0),
         ]
         cur.executemany('''
             INSERT INTO consumable_templates (name, description, icon, restore_type, restore_percent, price)
@@ -480,5 +515,47 @@ def seed_guild_quests():
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', quests)
         conn.commit()
-        print(f"✅ Добавлено {len(quests)} гильдейских квестов")
+    conn.close()
+
+
+def seed_premium_shop():
+    """Заполнение премиум-магазина"""
+    conn = sqlite3.connect(DB_NAME)
+    cur = conn.cursor()
+    cur.execute('SELECT COUNT(*) FROM premium_shop')
+    if cur.fetchone()[0] == 0:
+        items = [
+            ('Набор слабых кристаллов (10 шт)', '10 слабых кристаллов заточки (+15% каждый)', '💎', 20, 'crystal_pack', '{"crystal_type": "weak", "count": 10}'),
+            ('Набор средних кристаллов (5 шт)', '5 средних кристаллов заточки (+35% каждый)', '💎', 30, 'crystal_pack', '{"crystal_type": "medium", "count": 5}'),
+            ('Набор сильных кристаллов (3 шт)', '3 сильных кристалла заточки (+55% каждый)', '💎', 60, 'crystal_pack', '{"crystal_type": "strong", "count": 3}'),
+            ('Свиток снятия проклятия', 'Снимает любое проклятие (Проклятие или Печать башни)', '📜', 10, 'scroll', '{"effect": "remove_curse"}'),
+            ('VIP Серебряный (25%)', '+25% к опыту и серебру на 30 дней', '⬜', 300, 'vip', '{"vip_level": 2, "bonus": 25}'),
+            ('VIP Золотой (50%)', '+50% к опыту и серебру на 30 дней', '🌟', 600, 'vip', '{"vip_level": 3, "bonus": 50}'),
+            ('VIP Алмазный (100%)', '+100% к опыту и серебру на 30 дней', '👑', 1200, 'vip', '{"vip_level": 5, "bonus": 100}'),
+        ]
+        cur.executemany('''
+            INSERT INTO premium_shop (name, description, icon, price, item_type, item_data)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', items)
+        conn.commit()
+    conn.close()
+
+
+def add_vip_columns():
+    """Добавляет колонки VIP в таблицу characters если их нет"""
+    conn = sqlite3.connect(DB_NAME)
+    cur = conn.cursor()
+    
+    cur.execute("PRAGMA table_info(characters)")
+    columns = [col[1] for col in cur.fetchall()]
+    
+    if 'vip' not in columns:
+        cur.execute('ALTER TABLE characters ADD COLUMN vip INTEGER DEFAULT 0')
+        print("✅ Добавлена колонка vip")
+    
+    if 'vip_expires_at' not in columns:
+        cur.execute('ALTER TABLE characters ADD COLUMN vip_expires_at TIMESTAMP DEFAULT NULL')
+        print("✅ Добавлена колонка vip_expires_at")
+    
+    conn.commit()
     conn.close()

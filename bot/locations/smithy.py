@@ -31,7 +31,7 @@ async def show_smithy(vk, user_id):
             keyboard.add_button(label, color=VkKeyboardColor.PRIMARY,
                                 payload={'cmd': 'smithy_select_item', 'item_id': item['id']})
             keyboard.add_line()
-        keyboard.add_button('🔙 Назад в рынок', color=VkKeyboardColor.SECONDARY, payload={'cmd': 'market'})
+        keyboard.add_button('🏪 На рынок', color=VkKeyboardColor.SECONDARY, payload={'cmd': 'go_market'})
         await send_message(vk, user_id, f"⚒ Кузница\nВаши 💰: {char['silver']}\nВыберите предмет для улучшения:", keyboard, attachment=SMITHY_IMAGE)
         user_data = await get_user_async(user_id)
         context = user_data['context']

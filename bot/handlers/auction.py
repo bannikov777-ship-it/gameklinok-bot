@@ -46,5 +46,5 @@ def get_auction_keyboard():
     keyboard.add_button('🔄 Обновить', color=VkKeyboardColor.PRIMARY, payload={'cmd': 'auction_refresh'})
     keyboard.add_button('📤 Выставить', color=VkKeyboardColor.PRIMARY, payload={'cmd': 'auction_sell'})
     keyboard.add_line()
-    keyboard.add_button('🔙 Назад в рынок', color=VkKeyboardColor.SECONDARY, payload={'cmd': 'back'})
+    keyboard.add_button('🏪 На рынок', color=VkKeyboardColor.SECONDARY, payload={'cmd': 'go_market'})
     return keyboard

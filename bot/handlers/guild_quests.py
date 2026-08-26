@@ -32,7 +32,7 @@ async def handle_guild_quests(vk, user_id, cmd, payload=None):
                                 payload={'cmd': 'guild_quest_take', 'quest_id': q['id']})
             if i % 2 == 1:
                 keyboard.add_line()
-        keyboard.add_button('🔙 Назад', color=VkKeyboardColor.SECONDARY, payload={'cmd': 'guild'})
+        keyboard.add_button('🏰 В гильдию', color=VkKeyboardColor.SECONDARY, payload={'cmd': 'go_guild'})
         await send_message(vk, user_id, text, keyboard)
         return True
 
@@ -76,7 +76,7 @@ async def handle_guild_quests(vk, user_id, cmd, payload=None):
         text += f"🎖 Награда: {quest['exp_reward']} опыта, {quest['silver_reward']} серебра"
         keyboard = VkKeyboard()
         keyboard.add_button('❌ Отменить', color=VkKeyboardColor.NEGATIVE, payload={'cmd': 'guild_quest_cancel'})
-        keyboard.add_button('🔙 Назад', color=VkKeyboardColor.SECONDARY, payload={'cmd': 'guild'})
+        keyboard.add_button('🏰 В гильдию', color=VkKeyboardColor.SECONDARY, payload={'cmd': 'go_guild'})
         await send_message(vk, user_id, text, keyboard)
         return True
 

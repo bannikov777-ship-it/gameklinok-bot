@@ -5,7 +5,7 @@ from keyboards import get_exit_keyboard
 EXIT_IMAGE = 'photo-240828623_456239036'
 
 async def show_exit(vk, user_id):
-    """Показ выхода из города"""
+    """Показ выхода из города (ворота)"""
     text = "🚪 Вы вышли за городские ворота. Куда направимся?"
     await send_message(vk, user_id, text, get_exit_keyboard(), attachment=EXIT_IMAGE)
     user_data = await get_user_async(user_id)

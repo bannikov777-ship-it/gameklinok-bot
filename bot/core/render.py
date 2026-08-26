@@ -21,9 +21,10 @@ def upload_profile_image(vk, user_id, gender):
     return GENDER_IMAGES.get(gender)
 
 def render_profile(char, equipment):
+    from vip import get_vip, get_vip_icon, get_vip_name, VIP_NAMES, VIP_COLORS, VIP_BONUSES
+    
     slots_display = {'head': '🎩', 'weapon_right': '🗡️', 'armor': '🛡️', 'boots': '👢'}
     
-    # Добавляем левую руку только если есть класс (уровень 20+)
     if char.get('class') and char.get('level', 0) >= 20:
         slots_display['weapon_left'] = '⚔️'
     
@@ -51,60 +52,72 @@ def render_profile(char, equipment):
     gender_display = format_gender(char['gender'])
     class_display = char['class'] if char['class'] else "Не выбран"
     
-    # Если нет класса, добавляем подсказку о левой руке
+    # VIP отображение
+    vip_level, expires_at = get_vip(char['id'])
+    vip_display = ""
+    vip_bonus_text = ""
+    vip_name = ""
+    vip_icon = ""
+    
+    if vip_level > 0:
+        vip_icon = VIP_COLORS.get(vip_level, '')
+        vip_name = VIP_NAMES.get(vip_level, '')
+        vip_display = f" {vip_icon}[{vip_name}]"
+        bonus = VIP_BONUSES.get(vip_level, {})
+        vip_bonus_text = f"\n👑 VIP бонус: +{bonus.get('exp', 0)}% к опыту и серебру"
+    
+    # Формируем строку с ID и именем
+    id_display = f"🆔 {char['id']}"
+    
     left_hand_hint = ""
     if not char.get('class'):
         left_hand_hint = "\n🛡️ Левая рука откроется после выбора класса (20 уровень)"
     
     text = (
-        f"👤 {char['name']} | {gender_display} | {class_display} | Ур.{char['level']} 📈 Опыт: {exp_current} / {exp_needed} [{bar}]\n"
+        f"👤 {id_display} {char['name']}{vip_display} | {gender_display} | {class_display} | Ур.{char['level']} 📈 Опыт: {exp_current} / {exp_needed} [{bar}]\n"
         f"❤️ {char['hp']}/{char['max_hp']} | 💧 {char['mana']}/{char['max_mana']} | ⚡ {char['stamina']}/{char['max_stamina']}\n"
-        f"⚔️ {char['attack']} | 🛡 {char['defense']} | 💥{round(char['crit_chance'])}% | 💨{round(char['dodge_chance'])}% | 🏆 {char.get('trophies', 0)} | 💰 {char['silver']} | 💎 {char.get('crystals', 0)}\n"
+        f"⚔️ {char['attack']} | 🛡 {char['defense']} | 💥{round(char['crit_chance'])}% | 💨{round(char['dodge_chance'])}% | 🏆 {char.get('trophies', 0)} | 💰 {char['silver']} | 💎 {char.get('crystals', 0)}{vip_bonus_text}\n"
         f"ЭКИПИРОВКА: {equip_line}{debuff_text}{left_hand_hint}"
     )
     return text
 
-def item_bonus_str(item):
-    """Формирует строку с бонусами предмета"""
-    if not item:
-        return ""
-    bonus = []
-    if item.get('attack'): 
-        bonus.append(f"+{item['attack']} атк")
-    if item.get('defense'): 
-        bonus.append(f"+{item['defense']} защ")
-    if item.get('hp'): 
-        bonus.append(f"+{item['hp']} HP")
-    if item.get('mana'): 
-        bonus.append(f"+{item['mana']} маны")
-    if item.get('bonus_crit'): 
-        crit = item['bonus_crit']
-        bonus.append(f"💥{crit:+}% крит")
-    if item.get('bonus_dodge'): 
-        dodge = item['bonus_dodge']
-        bonus.append(f"💨{dodge:+}% уворот")
-    upgrade = item.get('upgrade_level', 0)
-    if upgrade > 0:
-        bonus.append(f"🔨+{upgrade}")
-    return f" ({', '.join(bonus)})" if bonus else ""
 
-def item_line(item):
-    """Формирует строку для одного предмета"""
-    if not item:
-        return "—"
-    return f"{item['icon']}{item['name']}{item_bonus_str(item)}"
+# core/render.py - исправленная render_inventory (добавляем VIP статус)
 
 def render_inventory(inv_items, equipment, consumables=None, owner_id=None):
-    """Отрисовка инвентаря с учетом уровня и класса персонажа"""
+    from .async_wrappers import get_player_consumables, get_player_herbs
+    from resources import get_player_resources
+    from core import get_character_by_id
+    from vip import get_vip, get_vip_icon, get_vip_name, VIP_NAMES, VIP_COLORS
     
-    # Получаем персонажа для проверки уровня и класса
     char = None
     if owner_id:
         char = get_character_by_id(owner_id)
     
     lines = []
     
-    # Определяем слоты для отображения
+    # VIP статус в инвентаре
+    if char:
+        vip_level, expires_at = get_vip(char['id'])
+        if vip_level > 0:
+            vip_icon = VIP_COLORS.get(vip_level, '')
+            vip_name = VIP_NAMES.get(vip_level, '')
+            lines.append(f"{vip_icon} {char['name']} [{vip_name}]")
+            # Показываем оставшееся время
+            from datetime import datetime
+            if expires_at:
+                remaining = datetime.fromisoformat(expires_at) - datetime.now()
+                days = remaining.days
+                if days > 0:
+                    lines.append(f"👑 VIP статус: {vip_name} (действует {days} дн.)")
+                else:
+                    hours = remaining.seconds // 3600
+                    if hours > 0:
+                        lines.append(f"👑 VIP статус: {vip_name} (действует {hours} ч.)")
+                    else:
+                        lines.append(f"👑 VIP статус: {vip_name} (действует менее часа)")
+            lines.append("")
+    
     slots_info = {
         'head': ('🎩', 'Голова'),
         'weapon_right': ('🗡️', 'Правая рука'),
@@ -112,16 +125,37 @@ def render_inventory(inv_items, equipment, consumables=None, owner_id=None):
         'boots': ('👢', 'Сапоги')
     }
     
-    # Добавляем левую руку только если есть класс (уровень 20+)
     if char and char.get('class') and char.get('level', 0) >= 20:
         slots_info['weapon_left'] = ('🛡️', 'Левая рука')
     
-    # Голова
+    def item_bonus_str(item):
+        if not item:
+            return ""
+        bonus = []
+        if item.get('attack'): bonus.append(f"+{item['attack']} атк")
+        if item.get('defense'): bonus.append(f"+{item['defense']} защ")
+        if item.get('hp'): bonus.append(f"+{item['hp']} HP")
+        if item.get('mana'): bonus.append(f"+{item['mana']} маны")
+        if item.get('bonus_crit'): 
+            crit = item['bonus_crit']
+            bonus.append(f"💥{crit:+}% крит")
+        if item.get('bonus_dodge'): 
+            dodge = item['bonus_dodge']
+            bonus.append(f"💨{dodge:+}% уворот")
+        upgrade = item.get('upgrade_level', 0)
+        if upgrade > 0:
+            bonus.append(f"🔨+{upgrade}")
+        return f" ({', '.join(bonus)})" if bonus else ""
+    
+    def item_line(item):
+        if not item:
+            return "—"
+        return f"{item['icon']}{item['name']}{item_bonus_str(item)}"
+
     lines.append(f"{slots_info['head'][0]} {slots_info['head'][1]}")
     lines.append(item_line(equipment.get('head')))
     lines.append("")
     
-    # Правая рука / Левая рука
     right = equipment.get('weapon_right')
     left = equipment.get('weapon_left') if 'weapon_left' in slots_info else None
     
@@ -133,17 +167,14 @@ def render_inventory(inv_items, equipment, consumables=None, owner_id=None):
         lines.append(item_line(right) if right else '—')
     lines.append("")
     
-    # Торс
     lines.append(f"{slots_info['armor'][0]} {slots_info['armor'][1]}")
     lines.append(item_line(equipment.get('armor')))
     lines.append("")
     
-    # Сапоги
     lines.append(f"{slots_info['boots'][0]} {slots_info['boots'][1]}")
     lines.append(item_line(equipment.get('boots')))
     lines.append("")
     
-    # Если левая рука не доступна, показываем подсказку
     if char and (not char.get('class') or char.get('level', 0) < 20):
         lines.append("🛡️ Левая рука откроется после выбора класса (20 уровень)")
         lines.append("")

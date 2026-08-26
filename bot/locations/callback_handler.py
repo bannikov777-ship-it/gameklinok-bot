@@ -1,4 +1,4 @@
-# locations/callback_handler.py - исправленный импорт
+# locations/callback_handler.py - ПОЛНОСТЬЮ ИСПРАВЛЕННЫЙ
 
 import sqlite3
 import asyncio
@@ -21,8 +21,14 @@ from battle import process_battle_action
 from keyboards import get_back_keyboard, get_gender_keyboard, get_class_choice_keyboard
 from scheduler import scheduler
 from locations.tavern import restore_after_sleep
-from handlers import show_mail, show_mail_read, show_mail_delete, show_mail_write, handle_tower_commands
+from handlers.mail import show_mail, show_mail_read, show_mail_delete, show_mail_write
+from handlers.tower_handlers import handle_tower_commands
 from handlers.guild_quests import handle_guild_quests
+from admin import admin_codes_menu, admin_show_codes, admin_create_code
+from locations.admin_panel import show_admin_panel
+from locations.scrolls import show_scrolls, use_scroll
+from locations.premium import show_premium_shop, show_premium_buy_prompt, show_premium_buy_confirm, show_premium_buy_execute
+from locations.codes import show_codes_menu, process_code_enter
 
 # Импортируем функции из locations
 from . import (
@@ -33,21 +39,22 @@ from . import (
     show_meadow, show_rating, show_guild_donate, show_guild_withdraw,
     show_guild_donate_confirm, show_guild_withdraw_confirm, 
     show_guild_members, show_guild_storage, show_guild_stats,
-    show_guild_manage, show_guild_manage_member, show_guild_chat,
+    show_guild_manage, show_guild_manage_by_id, show_guild_manage_member_by_id,
+    show_guild_chat,
     show_hunters_quests, show_hunters_my_quests, show_hunters_take_quest,
     show_hunters_sell, show_healer_buy, show_healer_craft, 
     show_healer_sell_herbs, show_smithy_upgrade_menu, 
     show_tavern_food, show_tavern_room, show_church_remove_debuff,
     show_inventory_equip, show_inventory_unequip, show_inventory_equip_select,
-    forest_deep, forest_wander, back_to_exit,
+    forest_deep, forest_wander,
     graveyard_deep, graveyard_wander, meadow_herbs,
     show_tower
 )
 
-# Импортируем функции из market отдельно (работает!)
+# Импортируем функции из market отдельно
 from locations.market import show_market_category, show_market_buy_item
 from locations.tower import show_tower_chat
-# show_tower_chat определяем здесь, так как она не в __init__.py
+from locations.graveyard import back_to_exit as graveyard_back_to_exit
 
 async def show_tower_chat(vk, user_id):
     """Показ чата группы башни"""
@@ -70,6 +77,21 @@ async def show_tower_chat(vk, user_id):
     context = user_data['context']
     context['parent_state'] = 'tower'
     await update_user_async(user_id, state='tower_chat', context=context)
+
+async def show_sleep_status(vk, user_id):
+    """Показ статуса сна"""
+    user_data = await get_user_async(user_id)
+    context = user_data['context']
+    sleep_end_time = context.get('sleep_end_time')
+    if not sleep_end_time:
+        await send_message(vk, user_id, 'Вы сейчас не спите.', get_back_keyboard('таверну'))
+        return
+    remaining = max(0, sleep_end_time - time.time())
+    hours = int(remaining // 3600)
+    minutes = int((remaining % 3600) // 60)
+    seconds = int(remaining % 60)
+    from keyboards import get_sleep_status_keyboard
+    await send_message(vk, user_id, f'⏳ До пробуждения осталось: {hours}ч {minutes}м {seconds}с', get_sleep_status_keyboard())
 
 
 async def handle_callback(vk, user_id, payload):
@@ -124,57 +146,160 @@ async def handle_callback(vk, user_id, payload):
     if await handle_guild_quests(vk, user_id, cmd, payload):
         return
 
+    # ---- БОЙ ----
     if cmd.startswith('battle_'):
         action = cmd[7:]
         await process_battle_action(vk, user_id, action, payload)
         return
 
-    # ---- КНОПКА НАЗАД ----
-    if cmd == 'back':
-        user_data = await get_user_async(user_id)
-        current_state = user_data['state']
-        print(f"🔙 BACK: current_state={current_state}")
-
-        if current_state == 'awaiting_guild_name':
-            await show_guild(vk, user_id)
-            return
-        if current_state == 'tower_chat':
-                # Возвращаемся в башню
-            await show_tower(vk, user_id)
-            return
-            
-        if current_state == 'awaiting_tower_message':
-                # Возвращаемся в чат башни
-            await show_tower_chat(vk, user_id)
-            return
-        if current_state.startswith('guild_'):
-            await show_guild(vk, user_id)
-            return
-        if current_state.startswith('inventory_'):
-            await show_inventory(vk, user_id)
-            return
-        if current_state == 'inventory':
-            await show_profile(vk, user_id)
-            return
-        if current_state == 'profile':
-            context = user_data['context']
-            target = context.pop('return_to', 'city')
-            context.pop('profile_return_to', None)
-            await update_user_async(user_id, context=context)
-            from .base import navigate_to
-            await navigate_to(vk, user_id, target)
-            return
-        if current_state == 'healer_craft':
-            await show_healer(vk, user_id)
-            return
-        if current_state == 'guild_stats':
-            await show_guild(vk, user_id)
-            return
-        context = user_data['context']
-        parent = context.pop('parent_state', 'city')
-        await update_user_async(user_id, context=context)
+ # ---- НАВИГАЦИЯ (явные переходы) ----
+    if cmd == 'go_city':
         from .base import navigate_to
-        await navigate_to(vk, user_id, parent)
+        await navigate_to(vk, user_id, 'city')
+        return
+    
+    if cmd == 'go_meadow':
+        from .base import navigate_to
+        await navigate_to(vk, user_id, 'meadow')
+        return
+
+    if cmd == 'go_город':
+        from .base import navigate_to
+        await navigate_to(vk, user_id, 'meadow')
+        return
+
+    if cmd == 'go_инвентарь':
+        await show_inventory(vk, user_id)
+        return
+
+    if cmd == 'go_market':
+        from .base import navigate_to
+        await navigate_to(vk, user_id, 'market')
+        return
+
+    if cmd == 'go_tavern':
+        from .base import navigate_to
+        await navigate_to(vk, user_id, 'tavern')
+        return
+
+    if cmd == 'go_healer':
+        from .base import navigate_to
+        await navigate_to(vk, user_id, 'healer')
+        return
+
+    if cmd == 'go_profile':
+        await show_profile(vk, user_id)
+        return
+
+    if cmd == 'go_inventory':
+        await show_inventory(vk, user_id)
+        return
+
+    if cmd == 'go_exit':
+        from .base import navigate_to
+        await navigate_to(vk, user_id, 'exit')
+        return
+
+    if cmd == 'go_forest':
+        from .base import navigate_to
+        await navigate_to(vk, user_id, 'forest')
+        return
+
+    if cmd == 'go_graveyard':
+        from .base import navigate_to
+        await navigate_to(vk, user_id, 'graveyard')
+        return
+
+    if cmd == 'go_tower':
+        from .base import navigate_to
+        await navigate_to(vk, user_id, 'tower')
+        return
+
+    if cmd == 'go_guild':
+        from .base import navigate_to
+        await navigate_to(vk, user_id, 'guild')
+        return
+
+    if cmd == 'go_church':
+        from .base import navigate_to
+        await navigate_to(vk, user_id, 'church')
+        return
+
+    # ---- ПРОМОКОДЫ ----
+    if cmd == 'code_menu':
+        await show_codes_menu(vk, user_id)
+        return
+
+    if cmd == 'code_enter':
+        await send_message(vk, user_id, '📝 Введите промокод:')
+        await update_user_async(user_id, state='awaiting_code', context={'parent_state': 'city'})
+        return
+
+    if cmd == 'copy_code':
+        code = payload.get('code')
+        if code:
+            await send_message(vk, user_id, f'📋 Код скопирован:\n`{code}`')
+        return
+
+    # ---- СВИТКИ ----
+    if cmd == 'scrolls':
+        await show_scrolls(vk, user_id)
+        return
+
+    if cmd == 'scroll_use':
+        scroll_id = payload.get('scroll_id')
+        scroll_type = payload.get('type', 'curse_remove')
+        if scroll_id:
+            await use_scroll(vk, user_id, scroll_id, scroll_type)
+        else:
+            await send_message(vk, user_id, '❌ Ошибка: свиток не найден.', get_back_keyboard('инвентарь'))
+        return
+
+    # ---- ПРЕМИУМ МАГАЗИН ----
+    if cmd == 'premium_shop':
+        await show_premium_shop(vk, user_id)
+        return
+
+    if cmd == 'premium_buy_prompt':
+        await show_premium_buy_prompt(vk, user_id)
+        return
+
+    if cmd == 'premium_buy_confirm':
+        item_id = payload.get('item_id')
+        if item_id:
+            await show_premium_buy_execute(vk, user_id, item_id)
+        return
+
+    if cmd == 'premium_buy_cancel':
+        await send_message(vk, user_id, '❌ Покупка отменена.', get_back_keyboard('премиум магазин'))
+        await show_premium_shop(vk, user_id)
+        return
+
+    if cmd == 'premium_refresh':
+        await show_premium_shop(vk, user_id)
+        return
+
+    # ---- АДМИН-ПАНЕЛЬ ----
+    if cmd == 'admin_panel':
+        await show_admin_panel(vk, user_id)
+        return
+
+    if cmd == 'admin_codes_menu':
+        await admin_codes_menu(vk, user_id)
+        return
+
+    if cmd == 'admin_codes_list':
+        await admin_show_codes(vk, user_id)
+        return
+
+    if cmd == 'admin_code_create':
+        amount = payload.get('amount', 100)
+        reward_type = payload.get('type', 'crystals')
+        await admin_create_code(vk, user_id, amount=amount, reward_type=reward_type)
+        return
+
+    if cmd == 'admin_codes_refresh':
+        await admin_show_codes(vk, user_id)
         return
 
     # ---- ЧАТ БАШНИ ----
@@ -191,24 +316,37 @@ async def handle_callback(vk, user_id, payload):
     if cmd == 'inventory':
         await show_inventory(vk, user_id)
         return
+
     if cmd == 'inventory_equip':
         await show_inventory_equip(vk, user_id)
         return
+
     if cmd == 'inventory_unequip':
         await show_inventory_unequip(vk, user_id)
         return
+
+    if cmd == 'inventory_equip_prompt':
+        await send_message(vk, user_id, '📝 Введите ID предмета, который хотите экипировать:')
+        await update_user_async(user_id, state='awaiting_inventory_equip_id', context={'parent_state': 'inventory'})
+        return
+
+    if cmd == 'inventory_unequip_prompt':
+        await send_message(vk, user_id, '📝 Введите ID предмета, который хотите снять:')
+        await update_user_async(user_id, state='awaiting_inventory_unequip_id', context={'parent_state': 'inventory'})
+        return
+
     if cmd == 'inv_equip_slot':
         slot = payload.get('slot')
         await show_inventory_equip_select(vk, user_id, slot)
         return
+
     if cmd == 'inv_equip_item':
         slot = payload.get('slot')
         item_id = payload.get('item_id')
         char = await get_character_async(user_id)
         if char:
             equip_item(char['id'], item_id, slot)
-            from core import recalc_stats_async
-            await recalc_stats_async(char['id'])  # <-- добавляем пересчет
+            await recalc_stats_async(char['id'])
             await send_message(vk, user_id, '✅ Предмет надет!', get_back_keyboard('инвентарь'))
             await show_inventory(vk, user_id)
         return
@@ -218,8 +356,7 @@ async def handle_callback(vk, user_id, payload):
         char = await get_character_async(user_id)
         if char:
             unequip_item(char['id'], slot)
-            from core import recalc_stats_async
-            await recalc_stats_async(char['id'])  # <-- добавляем пересчет
+            await recalc_stats_async(char['id'])
             await send_message(vk, user_id, '✅ Предмет снят в инвентарь.', get_back_keyboard('инвентарь'))
             await show_inventory(vk, user_id)
         return
@@ -228,12 +365,12 @@ async def handle_callback(vk, user_id, payload):
     if cmd == 'market_shop':
         await show_market_shop(vk, user_id)
         return
-    
+
     if cmd == 'market_category':
         category = payload.get('category')
         await show_market_category(vk, user_id, category)
         return
-    
+
     if cmd == 'market_buy_item':
         template_name = payload.get('template')
         price = payload.get('price')
@@ -241,21 +378,35 @@ async def handle_callback(vk, user_id, payload):
         rarity = payload.get('rarity', 1)
         await show_market_buy_item(vk, user_id, template_name, price, shop_level, rarity)
         return
+
+    if cmd == 'market_buy_confirm':
+        template_name = payload.get('template')
+        price = payload.get('price')
+        shop_level = payload.get('shop_level', 1)
+        rarity = payload.get('rarity', 1)
+    
+        char = await get_character_async(user_id)
+        if not char:
+            await send_message(vk, user_id, 'Сначала создайте персонажа.', get_back_keyboard('город'))
+            return
     
         if char['silver'] < price:
             await send_message(vk, user_id, f'❌ Недостаточно серебра! Нужно {price}💰.', get_back_keyboard('магазин'))
             return
+    
         item_id = generate_shop_item(char['id'], template_name, shop_level)
         if not item_id:
             await send_message(vk, user_id, '❌ Ошибка при создании предмета.', get_back_keyboard('магазин'))
             return
+    
         conn = sqlite3.connect(DB_NAME)
         cur = conn.cursor()
         cur.execute('UPDATE characters SET silver = silver - ? WHERE id = ?', (price, char['id']))
         conn.commit()
         conn.close()
+    
         from core import get_item_prefix
-        await send_message(vk, user_id, f'✅ Вы купили **{get_item_prefix(shop_level)} {template_name}** за {price}💰!')
+        await send_message(vk, user_id, f'✅ Вы купили **{get_item_prefix(shop_level)} {template_name}** за {price}💰!', get_back_keyboard('магазин'))
         await show_market_shop(vk, user_id)
         return
 
@@ -263,12 +414,15 @@ async def handle_callback(vk, user_id, payload):
     if cmd == 'market_healer':
         await show_healer(vk, user_id)
         return
+
     if cmd == 'healer_buy':
         await show_healer_buy(vk, user_id)
         return
+
     if cmd == 'healer_craft':
         await show_healer_craft(vk, user_id)
         return
+
     if cmd == 'healer_craft_do':
         recipe_id = payload.get('recipe_id')
         if not recipe_id:
@@ -282,12 +436,14 @@ async def handle_callback(vk, user_id, payload):
         try:
             success, msg = await asyncio.to_thread(craft_item, char['id'], recipe_id)
             await send_message(vk, user_id, f'{"✅" if success else "❌"} {msg}')
+            await show_healer_craft(vk, user_id)
         except Exception as e:
             await send_message(vk, user_id, f'❌ Ошибка при крафте: {e}')
             import traceback
             traceback.print_exc()
-        await show_healer_craft(vk, user_id)
+            await show_healer_craft(vk, user_id)
         return
+
     if cmd == 'buy_consumable':
         template_id = payload.get('template_id')
         price = payload.get('price')
@@ -297,11 +453,13 @@ async def handle_callback(vk, user_id, payload):
             return
         success, msg = buy_consumable(char['id'], template_id, 1)
         if success:
-            await send_message(vk, user_id, f'✅ {msg}', get_back_keyboard('лекаря'))
-            await show_healer(vk, user_id)
+            await send_message(vk, user_id, f'✅ {msg}')
+            await show_healer_buy(vk, user_id)
         else:
-            await send_message(vk, user_id, f'❌ {msg}', get_back_keyboard('лекаря'))
+            await send_message(vk, user_id, f'❌ {msg}')
+            await show_healer_buy(vk, user_id)
         return
+
     if cmd == 'healer_sell_herbs':
         await show_healer_sell_herbs(vk, user_id)
         return
@@ -310,6 +468,7 @@ async def handle_callback(vk, user_id, payload):
     if cmd == 'smithy':
         await show_smithy(vk, user_id)
         return
+
     if cmd == 'smithy_select_item':
         item_id = payload.get('item_id')
         if not item_id:
@@ -317,6 +476,7 @@ async def handle_callback(vk, user_id, payload):
             return
         await show_smithy_upgrade_menu(vk, user_id, item_id)
         return
+
     if cmd == 'smithy_upgrade':
         crystal_id = payload.get('crystal_id')
         char = await get_character_async(user_id)
@@ -331,7 +491,6 @@ async def handle_callback(vk, user_id, payload):
             return
         success, msg = upgrade_item(item_id, crystal_id)
         if success:
-            # Статы уже пересчитаны в upgrade_item
             await send_message(vk, user_id, f'✅ {msg}', get_back_keyboard('кузница'))
         else:
             await send_message(vk, user_id, f'❌ {msg}', get_back_keyboard('кузница'))
@@ -342,9 +501,11 @@ async def handle_callback(vk, user_id, payload):
     if cmd == 'church':
         await show_church(vk, user_id)
         return
+
     if cmd == 'church_remove_debuff':
         await show_church_remove_debuff(vk, user_id, 1)
         return
+
     if cmd == 'church_remove_tower_debuff':
         await show_church_remove_debuff(vk, user_id, 2)
         return
@@ -358,182 +519,127 @@ async def handle_callback(vk, user_id, payload):
     if cmd == 'guild':
         await show_guild(vk, user_id)
         return
+
     if cmd == 'guild_donate':
         await show_guild_donate(vk, user_id)
         return
+
     if cmd == 'guild_withdraw':
         await show_guild_withdraw(vk, user_id)
         return
-    if cmd == 'guild_list':
-        guilds = get_all_guilds()
-        if not guilds:
-            await send_message(vk, user_id, 'Пока нет гильдий. Создайте свою!', get_back_keyboard('гильдию'))
-            return
-        from vk_api.keyboard import VkKeyboard, VkKeyboardColor
-        keyboard = VkKeyboard()
-        for g in guilds:
-            label = f"{g['name']} (Ур.{g['level']}, 💰{g['silver']})"
-            keyboard.add_button(label, color=VkKeyboardColor.PRIMARY, payload={'cmd': 'guild_join', 'guild_id': g['id']})
-            keyboard.add_line()
-        keyboard.add_button('🔙 Назад', color=VkKeyboardColor.SECONDARY, payload={'cmd': 'guild'})
-        await send_message(vk, user_id, '📋 Список гильдий:\nВыберите гильдию для вступления:', keyboard)
+
+    if cmd == 'guild_manage_by_id':
+        from locations.guild import show_guild_manage_by_id
+        await show_guild_manage_by_id(vk, user_id)
         return
-    if cmd == 'guild_create':
-        await send_message(vk, user_id, 'Введите название гильдии (макс. 30 символов):')
-        await update_user_async(user_id, state='awaiting_guild_name', context={'parent_state': 'guild'})
+
+    if cmd == 'go_гильдию':
+        await show_guild(vk, user_id)
         return
-    if cmd == 'guild_join':
-        guild_id = payload.get('guild_id')
-        if not guild_id:
-            await send_message(vk, user_id, 'Ошибка: не указана гильдия.', get_back_keyboard('гильдию'))
-            return
-        char = await get_character_async(user_id)
-        if not char:
-            await send_message(vk, user_id, 'Сначала создайте персонажа.', get_back_keyboard('город'))
-            return
-        success, msg = join_guild(char['id'], guild_id)
-        if success:
-            await send_message(vk, user_id, f'✅ {msg}', get_back_keyboard('гильдию'))
-        else:
-            await send_message(vk, user_id, f'❌ {msg}', get_back_keyboard('гильдию'))
+
+    if cmd == 'guild_applications':
+        from locations.guild import show_guild_applications
+        await show_guild_applications(vk, user_id)
         return
+
     if cmd == 'guild_members':
+        from locations.guild import show_guild_members
         await show_guild_members(vk, user_id)
         return
+
     if cmd == 'guild_storage':
+        from locations.guild import show_guild_storage
         await show_guild_storage(vk, user_id)
         return
+
     if cmd == 'guild_storage_add':
-        char = await get_character_async(user_id)
-        if not char:
-            await send_message(vk, user_id, 'Сначала создайте персонажа.', get_back_keyboard('город'))
-            return
-        guild = await asyncio.to_thread(get_guild_by_character, char['id'])
-        if not guild:
-            await send_message(vk, user_id, 'Вы не состоите в гильдии.', get_back_keyboard('гильдию'))
-            return
-        inv_items = get_inventory(char['id'])
-        if not inv_items:
-            await send_message(vk, user_id, 'У вас нет предметов для передачи в склад.', get_back_keyboard('гильдию'))
-            return
-        from vk_api.keyboard import VkKeyboard, VkKeyboardColor
-        keyboard = VkKeyboard()
-        for item in inv_items:
-            label = f"{item['icon']} {item['name']} (x{item['quantity']})"
-            keyboard.add_button(label, color=VkKeyboardColor.PRIMARY,
-                                payload={'cmd': 'guild_storage_add_item', 'item_id': item['id']})
-            keyboard.add_line()
-        keyboard.add_button('🔙 Назад', color=VkKeyboardColor.SECONDARY, payload={'cmd': 'guild_storage'})
-        await send_message(vk, user_id, 'Выберите предмет для передачи в склад:', keyboard)
-        user_data = await get_user_async(user_id)
-        context = user_data['context']
-        context['parent_state'] = 'guild_storage'
-        await update_user_async(user_id, state='guild_storage_add', context=context)
+        from locations.guild import show_guild_storage_add
+        await show_guild_storage_add(vk, user_id)
         return
-    if cmd == 'guild_storage_add_item':
+
+    if cmd == 'guild_storage_add_items':
+        from locations.guild import show_guild_storage_add_items
+        await show_guild_storage_add_items(vk, user_id)
+        return
+
+    if cmd == 'guild_storage_add_crystals':
+        from locations.guild import show_guild_storage_add_crystals
+        await show_guild_storage_add_crystals(vk, user_id)
+        return
+
+    if cmd == 'guild_storage_add_item_confirm':
         item_id = payload.get('item_id')
-        char = await get_character_async(user_id)
-        if not char:
-            await send_message(vk, user_id, 'Сначала создайте персонажа.', get_back_keyboard('город'))
-            return
-        success, msg = add_to_guild_storage(char['id'], item_id)
-        if success:
-            await send_message(vk, user_id, f'✅ {msg}', get_back_keyboard('гильдию'))
-        else:
-            await send_message(vk, user_id, f'❌ {msg}', get_back_keyboard('гильдию'))
-        await show_guild_storage(vk, user_id)
+        item_type = payload.get('type', 'item')
+        if item_id:
+            from locations.guild import show_guild_storage_add_item_confirm
+            await show_guild_storage_add_item_confirm(vk, user_id, item_id, item_type)
         return
-    if cmd == 'guild_storage_item':
-        storage_id = payload.get('storage_id')
-        char = await get_character_async(user_id)
-        if not char:
-            await send_message(vk, user_id, 'Сначала создайте персонажа.', get_back_keyboard('город'))
+
+    if cmd == 'guild_storage_remove_prompt':
+        from locations.guild import show_guild_storage_remove_prompt
+        await show_guild_storage_remove_prompt(vk, user_id)
         return
-        guild = await asyncio.to_thread(get_guild_by_character, char['id'])
-        if not guild:
-            await send_message(vk, user_id, 'Вы не состоите в гильдии.', get_back_keyboard('гильдию'))
-        return
-        conn = sqlite3.connect(DB_NAME)
-        cur = conn.cursor()
-        cur.execute('SELECT rank FROM guild_members WHERE guild_id = ? AND character_id = ?', (guild['id'], char['id']))
-        row = cur.fetchone()
-        conn.close()
-        my_rank = row[0] if row else 'Участник'
-        if my_rank not in ('Лидер', 'Заместитель'):
-            await send_message(vk, user_id, 'У вас нет прав на изъятие предметов.', get_back_keyboard('гильдию'))
-            return
-        from vk_api.keyboard import VkKeyboard, VkKeyboardColor
-        keyboard = VkKeyboard()
-        keyboard.add_button('✅ Изъять 1 шт.', color=VkKeyboardColor.PRIMARY, payload={'cmd': 'guild_storage_remove', 'storage_id': storage_id, 'quantity': 1})
-        keyboard.add_line()
-        keyboard.add_button('🔙 Назад', color=VkKeyboardColor.SECONDARY, payload={'cmd': 'guild_storage'})
-        await send_message(vk, user_id, 'Выберите действие:', keyboard)
-        user_data = await get_user_async(user_id)
-        context = user_data['context']
-        context['parent_state'] = 'guild_storage'
-        await update_user_async(user_id, state='guild_storage_item', context=context)
-        return
+
     if cmd == 'guild_storage_remove':
         storage_id = payload.get('storage_id')
         quantity = payload.get('quantity', 1)
-        char = await get_character_async(user_id)
-        if not char:
-            await send_message(vk, user_id, 'Сначала создайте персонажа.', get_back_keyboard('город'))
-            return
-        guild = await asyncio.to_thread(get_guild_by_character, char['id'])
-        if not guild:
-            await send_message(vk, user_id, 'Вы не состоите в гильдии.', get_back_keyboard('гильдию'))
+        if storage_id:
+            from locations.guild import show_guild_storage_remove_confirm
+            await show_guild_storage_remove_confirm(vk, user_id, storage_id, quantity)
         return
-        success, msg = remove_from_guild_storage(guild['id'], storage_id, quantity, char['id'])
-        if success:
-            await send_message(vk, user_id, f'✅ {msg}', get_back_keyboard('гильдию'))
-        else:
-            await send_message(vk, user_id, f'❌ {msg}', get_back_keyboard('гильдию'))
-        await show_guild_storage(vk, user_id)
-        return
-    if cmd == 'guild_tasks':
-        await send_message(vk, user_id, '📜 Задания гильдии в разработке.', get_back_keyboard('гильдию'))
-        return
+
     if cmd == 'guild_stats':
+        from locations.guild import show_guild_stats
         await show_guild_stats(vk, user_id)
         return
+
     if cmd == 'guild_manage':
+        from locations.guild import show_guild_manage
         await show_guild_manage(vk, user_id)
         return
-    if cmd == 'guild_manage_member':
-        member_id = payload.get('member_id')
-        await show_guild_manage_member(vk, user_id, member_id)
-        return
+
+    # ✅ ИСПРАВЛЕНО: назначение ранга - возврат в управление
     if cmd == 'guild_set_rank':
         member_id = payload.get('member_id')
         new_rank = payload.get('rank')
-        char = await get_character_async(user_id)
-        if not char:
-            await send_message(vk, user_id, 'Сначала создайте персонажа.', get_back_keyboard('город'))
-            return
-        success, msg = set_rank(char['id'], member_id, new_rank)
-        if success:
-            await send_message(vk, user_id, f'✅ {msg}', get_back_keyboard('гильдию'))
-        else:
-            await send_message(vk, user_id, f'❌ {msg}', get_back_keyboard('гильдию'))
-        await show_guild_manage(vk, user_id)
+        if member_id and new_rank:
+            char = await get_character_async(user_id)
+            if not char:
+                await send_message(vk, user_id, 'Сначала создайте персонажа.', get_back_keyboard('город'))
+                return
+            success, msg = set_rank(char['id'], member_id, new_rank)
+            if success:
+                await send_message(vk, user_id, f'✅ {msg}')
+            else:
+                await send_message(vk, user_id, f'❌ {msg}')
+            # ✅ Возвращаем в управление гильдией
+            from locations.guild import show_guild_manage
+            await show_guild_manage(vk, user_id)
         return
+
+    # ✅ ИСПРАВЛЕНО: исключение участника - возврат в управление
     if cmd == 'guild_kick':
         member_id = payload.get('member_id')
-        char = await get_character_async(user_id)
-        if not char:
-            await send_message(vk, user_id, 'Сначала создайте персонажа.', get_back_keyboard('город'))
-            return
-        success, msg = kick_member(char['id'], member_id)
-        if success:
-            await send_message(vk, user_id, f'✅ {msg}', get_back_keyboard('гильдию'))
-        else:
-            await send_message(vk, user_id, f'❌ {msg}', get_back_keyboard('гильдию'))
-        await show_guild_manage(vk, user_id)
+        if member_id:
+            char = await get_character_async(user_id)
+            if not char:
+                await send_message(vk, user_id, 'Сначала создайте персонажа.', get_back_keyboard('город'))
+                return
+            success, msg = kick_member(char['id'], member_id)
+            if success:
+                await send_message(vk, user_id, f'✅ {msg}')
+            else:
+                await send_message(vk, user_id, f'❌ {msg}')
+            # ✅ Возвращаем в управление гильдией
+            from locations.guild import show_guild_manage
+            await show_guild_manage(vk, user_id)
         return
+
     if cmd == 'guild_chat':
+        from locations.guild import show_guild_chat
         await show_guild_chat(vk, user_id)
         return
+
     if cmd == 'guild_chat_send':
         await update_user_async(user_id, state='awaiting_guild_message', context={'parent_state': 'guild_chat'})
         await send_message(vk, user_id, 'Введите сообщение для чата гильдии:')
@@ -567,7 +673,7 @@ async def handle_callback(vk, user_id, payload):
         context['parent_state'] = 'tavern'
         await update_user_async(user_id, state='tavern_rumors', context=context)
         return
-    
+
     # ---- ЕДА ----
     if cmd == 'buy_food':
         percent = payload.get('percent')
@@ -590,22 +696,37 @@ async def handle_callback(vk, user_id, payload):
         await send_message(vk, user_id, f'✅ Вы съели еду и восстановили {restore} HP (теперь {new_hp}/{max_hp}).', get_back_keyboard('таверну'))
         await show_tavern(vk, user_id)
         return
-    
+
     # ---- СОН ----
     if cmd == 'sleep':
         percent = payload.get('percent')
         hours = payload.get('hours', 1)
+        price = payload.get('price', 0)
         char = await get_character_async(user_id)
         if not char:
             await send_message(vk, user_id, 'Сначала создайте персонажа.', get_back_keyboard('город'))
             return
+        
+        if char['silver'] < price:
+            await send_message(vk, user_id, f'❌ Недостаточно серебра! Нужно {price}💰.', get_back_keyboard('таверну'))
+            return
+        
         user_data = await get_user_async(user_id)
         context = user_data['context']
         if 'sleep_task_id' in context:
             scheduler.cancel(context['sleep_task_id'])
+        
         from keyboards import get_sleep_status_keyboard
+        
+        conn = sqlite3.connect(DB_NAME)
+        cur = conn.cursor()
+        cur.execute('UPDATE characters SET silver = silver - ? WHERE id = ?', (price, char['id']))
+        conn.commit()
+        conn.close()
+        
         await send_message(vk, user_id,
             f'😴 Вы легли спать на {hours} час(а). Восстановится {percent}% HP, {percent}% MP и {percent}% Stamina.\n'
+            f'💰 Снято {price} серебра\n\n'
             f'Вы можете выйти из комнаты, чтобы отменить сон.',
             get_sleep_status_keyboard()
         )
@@ -637,36 +758,44 @@ async def handle_callback(vk, user_id, payload):
     if cmd == 'market_auction':
         await show_auction(vk, user_id)
         return
+
     if cmd == 'auction_refresh':
         user_data = await get_user_async(user_id)
         page = user_data['context'].get('auction_page', 0)
         await show_auction(vk, user_id, page)
         return
+
     if cmd == 'auction_buy_prompt':
         await send_message(vk, user_id, 'Введите ID лота, который хотите купить (только число):')
         await update_user_async(user_id, state='awaiting_auction_buy_id', context={'parent_state': 'auction'})
         return
+
     if cmd == 'auction_sell':
         from .auction import show_auction_sell_menu
         await show_auction_sell_menu(vk, user_id)
         return
+
     if cmd == 'auction_sell_items':
         from .auction import show_auction_sell_select_items
         await show_auction_sell_select_items(vk, user_id, 'item')
         return
+
     if cmd == 'auction_sell_consumables':
         from .auction import show_auction_sell_select_items
         await show_auction_sell_select_items(vk, user_id, 'consumable')
         return
+
     if cmd == 'auction_sell_select_item':
         item_type = payload.get('item_type')
         item_id = payload.get('item_id')
         from .auction import show_auction_sell_price
         await show_auction_sell_price(vk, user_id, item_type, item_id)
         return
+
     if cmd == 'auction_sell_guild':
         await send_message(vk, user_id, '🏰 Продажа из склада гильдии пока в разработке.', get_back_keyboard('аукцион'))
         return
+
     if cmd == 'auction_confirm_yes':
         user_data = await get_user_async(user_id)
         context = user_data['context']
@@ -687,6 +816,7 @@ async def handle_callback(vk, user_id, payload):
         await update_user_async(user_id, state='auction', context=context)
         await show_auction(vk, user_id)
         return
+
     if cmd == 'auction_confirm_no':
         user_data = await get_user_async(user_id)
         context = user_data['context']
@@ -700,15 +830,19 @@ async def handle_callback(vk, user_id, payload):
     if cmd == 'hunters':
         await show_hunters(vk, user_id)
         return
+
     if cmd == 'hunters_sell':
         await show_hunters_sell(vk, user_id)
         return
+
     if cmd == 'hunters_quests':
         await show_hunters_quests(vk, user_id)
         return
+
     if cmd == 'hunters_my_quests':
         await show_hunters_my_quests(vk, user_id)
         return
+
     if cmd == 'hunters_take_quest':
         quest_id = payload.get('quest_id')
         if quest_id:
@@ -721,6 +855,7 @@ async def handle_callback(vk, user_id, payload):
     if cmd == 'mail':
         await show_mail(vk, user_id)
         return
+
     if cmd == 'mail_read':
         mail_id = payload.get('mail_id')
         if mail_id:
@@ -728,6 +863,7 @@ async def handle_callback(vk, user_id, payload):
         else:
             await send_message(vk, user_id, 'Ошибка: письмо не указано.', get_back_keyboard('почту'))
         return
+
     if cmd == 'mail_delete':
         mail_id = payload.get('mail_id')
         if mail_id:
@@ -735,9 +871,11 @@ async def handle_callback(vk, user_id, payload):
         else:
             await send_message(vk, user_id, 'Ошибка: письмо не указано.', get_back_keyboard('почту'))
         return
+
     if cmd == 'mail_write':
         await show_mail_write(vk, user_id)
         return
+
     if cmd == 'mail_claim_attachment':
         mail_id = payload.get('mail_id')
         if mail_id:
@@ -746,22 +884,27 @@ async def handle_callback(vk, user_id, payload):
         else:
             await send_message(vk, user_id, 'Ошибка: письмо не указано.', get_back_keyboard('почту'))
         return
+
     if cmd == 'mail_attachment_menu':
         from handlers.mail import show_mail_attachment_menu
         await show_mail_attachment_menu(vk, user_id)
         return
+
     if cmd == 'mail_attach_money':
         from handlers.mail import show_mail_attach_money
         await show_mail_attach_money(vk, user_id)
         return
+
     if cmd == 'mail_attach_item':
         from handlers.mail import show_mail_attach_item
         await show_mail_attach_item(vk, user_id)
         return
+
     if cmd == 'mail_attach_consumable':
         from handlers.mail import show_mail_attach_consumable
         await show_mail_attach_consumable(vk, user_id)
         return
+
     if cmd == 'mail_attach_item_select':
         item_id = payload.get('item_id')
         if item_id:
@@ -770,6 +913,7 @@ async def handle_callback(vk, user_id, payload):
         else:
             await send_message(vk, user_id, 'Ошибка: предмет не указан.', get_back_keyboard('почту'))
         return
+
     if cmd == 'mail_attach_consumable_select':
         item_id = payload.get('item_id')
         if item_id:
@@ -778,6 +922,7 @@ async def handle_callback(vk, user_id, payload):
         else:
             await send_message(vk, user_id, 'Ошибка: расходник не указан.', get_back_keyboard('почту'))
         return
+
     if cmd == 'mail_attach_none':
         from handlers.mail import show_mail_attach_none
         await show_mail_attach_none(vk, user_id)
@@ -787,72 +932,72 @@ async def handle_callback(vk, user_id, payload):
     if cmd == 'forest_deep':
         await forest_deep(vk, user_id)
         return
+
     if cmd == 'forest_wander':
         await forest_wander(vk, user_id)
         return
+
     if cmd == 'back_to_exit':
-        await back_to_exit(vk, user_id)
+        await graveyard_back_to_exit(vk, user_id)
         return
 
-    # ---- КЛАДБИЩЕ ПОСЛЕ БОЯ ----
+    # ---- КЛАДБИЩЕ ----
+    if cmd == 'graveyard':
+        from locations.graveyard import show_graveyard
+        await show_graveyard(vk, user_id)
+        return
+
     if cmd == 'graveyard_deep':
+        from locations.graveyard import graveyard_deep
         await graveyard_deep(vk, user_id)
         return
+
     if cmd == 'graveyard_wander':
+        from locations.graveyard import graveyard_wander
         await graveyard_wander(vk, user_id)
         return
-
+    
     # ---- ОСТАЛЬНЫЕ КОМАНДЫ ----
     if cmd == 'back_to_city':
         await show_city(vk, user_id)
         return
+
     if cmd == 'profile':
         await show_profile(vk, user_id)
         return
+
     if cmd == 'exit_city':
         await show_exit(vk, user_id)
         return
+
     if cmd == 'exit_city2':
         await show_meadow(vk, user_id)
         return
+
     if cmd == 'forest':
         await show_forest(vk, user_id)
         return
-    if cmd == 'graveyard':
-        await show_graveyard(vk, user_id)
-        return
+
     if cmd == 'meadow':
         await show_meadow(vk, user_id)
         return
+
     if cmd == 'meadow_tower':
         await show_tower(vk, user_id)
         return
+
     if cmd == 'meadow_city':
         await show_city2(vk, user_id)
         return
+
     if cmd == 'meadow_herbs':
         await meadow_herbs(vk, user_id)
         return
-    if cmd == 'tavern':
-        await show_tavern(vk, user_id)
-        return
-    if cmd == 'tavern_quests':
-        await send_message(vk, user_id, '📜 Доступные квесты:\n1. Принести шкуры волков\n2. Найти пропавший амулет\n(пока заглушка)', get_back_keyboard('таверну'))
-        user_data = await get_user_async(user_id)
-        context = user_data['context']
-        context['parent_state'] = 'tavern'
-        await update_user_async(user_id, state='tavern_quests', context=context)
-        return
-    if cmd == 'tavern_rumors':
-        await send_message(vk, user_id, '🗣 Слухи: говорят, в Пустошах видели светящийся камень. И ещё — в Стальном Троне кто-то ищет отважных искателей.', get_back_keyboard('таверну'))
-        user_data = await get_user_async(user_id)
-        context = user_data['context']
-        context['parent_state'] = 'tavern'
-        await update_user_async(user_id, state='tavern_rumors', context=context)
-        return
+
     if cmd == 'town_hall':
         await show_town_hall(vk, user_id)
         return
+
     if cmd == 'town_hall_class':
         char = await get_character_async(user_id)
         if not char:
@@ -866,9 +1011,11 @@ async def handle_callback(vk, user_id, payload):
             return
         await send_message(vk, user_id, 'Выберите свой класс:', get_class_choice_keyboard())
         return
+
     if cmd == 'market':
         await show_market(vk, user_id)
         return
+
     if cmd == 'create_character':
         if await get_character_async(user_id):
             await send_message(vk, user_id, 'У вас уже есть персонаж!', get_back_keyboard('город'))
@@ -876,21 +1023,6 @@ async def handle_callback(vk, user_id, payload):
         await send_message(vk, user_id, 'Как назовёшь своего героя? Напиши имя в ответ.')
         await update_user_async(user_id, state='awaiting_name', context={'step': 'name'})
         return
-    else:
-        await show_city(vk, user_id)
 
-async def show_sleep_status(vk, user_id):
-    """Показ статуса сна"""
-    import time
-    user_data = await get_user_async(user_id)
-    context = user_data['context']
-    sleep_end_time = context.get('sleep_end_time')
-    if not sleep_end_time:
-        await send_message(vk, user_id, 'Вы сейчас не спите.', get_back_keyboard('таверну'))
-        return
-    remaining = max(0, sleep_end_time - time.time())
-    hours = int(remaining // 3600)
-    minutes = int((remaining % 3600) // 60)
-    seconds = int(remaining % 60)
-    from keyboards import get_sleep_status_keyboard
-    await send_message(vk, user_id, f'⏳ До пробуждения осталось: {hours}ч {minutes}м {seconds}с', get_sleep_status_keyboard())
+    # Если ничего не подошло - показываем город
+    await show_city(vk, user_id)

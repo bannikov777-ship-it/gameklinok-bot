@@ -7,12 +7,12 @@ import asyncio
 import sqlite3
 from core import (
     get_character_async, update_user_async, send_message, get_user_async,
-    get_player_consumables  # <-- импортируем из core
+    get_player_consumables
 )
 from auction import get_active_auction_lots, expire_and_return_expired, get_lot_by_id, create_auction_lot
 from keyboards import get_auction_keyboard, get_back_keyboard
 from vk_api.keyboard import VkKeyboard, VkKeyboardColor
-from items import get_player_items  # <-- только get_player_items из items
+from items import get_player_items
 from config import DB_NAME
 
 async def show_auction(vk, user_id, page=0):
@@ -41,7 +41,7 @@ async def show_auction(vk, user_id, page=0):
         keyboard.add_button('🔄 Обновить', color=VkKeyboardColor.PRIMARY, payload={'cmd': 'auction_refresh'})
         keyboard.add_button('📤 Выставить', color=VkKeyboardColor.PRIMARY, payload={'cmd': 'auction_sell'})
         keyboard.add_line()
-        keyboard.add_button('🔙 Назад в рынок', color=VkKeyboardColor.SECONDARY, payload={'cmd': 'back'})
+        keyboard.add_button('🏪 На рынок', color=VkKeyboardColor.SECONDARY, payload={'cmd': 'go_market'})
         await send_message(vk, user_id, text, keyboard)
         user_data = await get_user_async(user_id)
         context = user_data['context']
@@ -76,7 +76,7 @@ async def show_auction_sell_menu(vk, user_id):
                 keyboard.add_line()
                 keyboard.add_button('🏰 Из склада гильдии', color=VkKeyboardColor.PRIMARY, payload={'cmd': 'auction_sell_guild'})
         keyboard.add_line()
-        keyboard.add_button('🔙 Назад', color=VkKeyboardColor.SECONDARY, payload={'cmd': 'back'})
+        keyboard.add_button('🔙 Назад', color=VkKeyboardColor.SECONDARY, payload={'cmd': 'auction_sell'})
         await send_message(vk, user_id, '📤 Что хотите выставить на аукцион?', keyboard)
         user_data = await get_user_async(user_id)
         context = user_data['context']
@@ -161,7 +161,7 @@ async def show_auction_buy_confirm(vk, user_id, lot_id):
         keyboard.add_button('✅ Да, купить', color=VkKeyboardColor.POSITIVE, payload={'cmd': 'auction_confirm_yes'})
         keyboard.add_button('❌ Нет, отмена', color=VkKeyboardColor.NEGATIVE, payload={'cmd': 'auction_confirm_no'})
         keyboard.add_line()
-        keyboard.add_button('🔙 Назад', color=VkKeyboardColor.SECONDARY, payload={'cmd': 'back'})
+        keyboard.add_button('🔙 Назад', color=VkKeyboardColor.SECONDARY, payload={'cmd': 'auction'})
         await send_message(vk, user_id, f"🛒 Подтвердите покупку:\n\nЛот ID: {lot_id}\nЦена: {lot['price']}💰\nВаши деньги: {char['silver']}💰\n\nВы уверены?", keyboard)
     except Exception as e:
         print(f"❌ Ошибка в show_auction_buy_confirm: {e}")

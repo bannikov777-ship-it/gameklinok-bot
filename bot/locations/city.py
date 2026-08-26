@@ -3,6 +3,8 @@ from core import get_character_async, update_user_async, send_message, get_user_
 from mail import get_unread_mail_count
 from keyboards import get_city_keyboard, get_lore_keyboard, get_city2_keyboard, get_back_keyboard
 from .base import navigate_to
+from admin import is_admin
+from vk_api.keyboard import VkKeyboard, VkKeyboardColor
 
 LOR_TEXT = (
     "🌍 Добро пожаловать в мир «Вольного Клинка»!\n\n"
@@ -26,7 +28,16 @@ async def show_city(vk, user_id):
     if not city:
         city = get_city(1)
     text = f"🏘️ {city['name']}\n\n{city['description']}"
-    await send_message(vk, user_id, text, get_city_keyboard(), attachment=city['image_attachment'])
+    
+    # Проверяем, является ли пользователь администратором для показа доп. кнопки
+    keyboard = get_city_keyboard()
+    
+    if await is_admin(user_id):
+        # Добавляем админ-кнопку в существующую клавиатуру
+        keyboard.add_line()
+        keyboard.add_button('🛠️ Админ-панель', color=VkKeyboardColor.NEGATIVE, payload={'cmd': 'admin_codes_menu'})
+    
+    await send_message(vk, user_id, text, keyboard, attachment=city['image_attachment'])
     await update_user_async(user_id, state='city', context={})
     unread = get_unread_mail_count(char['id'])
     if unread > 0:
@@ -43,7 +54,15 @@ async def show_city2(vk, user_id):
         await send_message(vk, user_id, '❌ Город ещё не доступен.', get_back_keyboard('луг'))
         return
     text = f"🏘️ {city['name']}\n\n{city['description']}"
-    await send_message(vk, user_id, text, get_city2_keyboard(), attachment=city['image_attachment'])
+    
+    # Проверяем админа для второго города
+    keyboard = get_city2_keyboard()
+    
+    if await is_admin(user_id):
+        keyboard.add_line()
+        keyboard.add_button('🛠️ Админ-панель', color=VkKeyboardColor.NEGATIVE, payload={'cmd': 'admin_codes_menu'})
+    
+    await send_message(vk, user_id, text, keyboard, attachment=city['image_attachment'])
     user_data = await get_user_async(user_id)
     context = user_data['context']
     context['parent_state'] = 'meadow'

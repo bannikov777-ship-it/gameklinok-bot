@@ -48,9 +48,9 @@ def get_player_crystals(owner_id):
     conn = sqlite3.connect(DB_NAME)
     cur = conn.cursor()
     cur.execute('''
-        SELECT ct.id, ct.name, ct.icon, ct.restore_percent, pc.quantity
-        FROM consumable_templates ct
-        JOIN player_consumables pc ON ct.id = pc.consumable_template_id
+        SELECT pc.id, ct.name, ct.icon, ct.restore_percent, pc.quantity
+        FROM player_consumables pc
+        JOIN consumable_templates ct ON pc.consumable_template_id = ct.id
         WHERE pc.owner_id = ? AND ct.restore_type = 'crystal' AND pc.quantity > 0
     ''', (owner_id,))
     rows = cur.fetchall()
